@@ -15,6 +15,13 @@
       "when": 1772905482925,
       "tag": "0001_third_mantis",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772907480779,
+      "tag": "0002_foamy_strong_guy",
+      "breakpoints": true
     }
   ]
 }

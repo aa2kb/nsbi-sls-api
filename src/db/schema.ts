@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, text, jsonb, doublePrecision, bigint } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, text, jsonb, doublePrecision, bigint, boolean } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -27,6 +27,7 @@ export const meetings = pgTable('meetings', {
   participants: jsonb('participants'),
   meetingAttendees: jsonb('meeting_attendees'),
   meetingAttendance: jsonb('meeting_attendance'),
+  processed: boolean('processed').notNull().default(false),
   syncedAt: timestamp('synced_at').notNull().defaultNow(),
 });
 

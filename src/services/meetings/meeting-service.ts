@@ -195,9 +195,14 @@ export async function syncMeetings(): Promise<SyncResult> {
   const data = await client.request<FirefliesResponse>(TRANSCRIPTS_QUERY, variables);
   const all = data.transcripts ?? [];
 
-  console.log(`[MeetingService] API returned ${all.length} transcript(s) — limiting to ${FETCH_LIMIT}`);
+  const isFullSync = !lastSyncDate;
+  const batch = isFullSync ? all : all.slice(0, FETCH_LIMIT);
 
-  const batch = all.slice(0, FETCH_LIMIT);
+  if (isFullSync) {
+    console.log(`[MeetingService] API returned ${all.length} transcript(s) — full sync, saving all`);
+  } else {
+    console.log(`[MeetingService] API returned ${all.length} transcript(s) — incremental sync, limiting to ${FETCH_LIMIT}`);
+  }
 
   // --- Upsert each meeting ---
   let saved = 0;
@@ -207,15 +212,18 @@ export async function syncMeetings(): Promise<SyncResult> {
     saved++;
   }
 
-  // --- Update cache with the most recent meeting date ---
+  // --- Update cache with 1ms past the most recent meeting date ---
+  // Using +1ms ensures fromDate is exclusive on the next run, preventing the
+  // same meeting from being re-fetched every sync.
   let latestMeetingDate: string | null = null;
   if (batch.length > 0) {
     const latest = batch.reduce((prev, curr) => ((curr.date ?? 0) > (prev.date ?? 0) ? curr : prev));
     latestMeetingDate = latest.dateString ?? null;
 
     if (latestMeetingDate) {
-      await setLastSyncDate(latestMeetingDate);
-      console.log(`[MeetingService] Cache updated — next sync will start from ${latestMeetingDate}`);
+      const nextFromDate = new Date(new Date(latestMeetingDate).getTime() + 1).toISOString();
+      await setLastSyncDate(nextFromDate);
+      console.log(`[MeetingService] Cache updated — next sync will start from ${nextFromDate} (1ms after latest meeting)`);
     }
   }
 
