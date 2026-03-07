@@ -29,6 +29,7 @@ export const meetings = pgTable('meetings', {
   meetingAttendance: jsonb('meeting_attendance'),
   processed: boolean('processed').notNull().default(false),
   participantsProcessed: boolean('participants_processed').notNull().default(false),
+  dataProcessed: boolean('data_processed').notNull().default(false),
   syncedAt: timestamp('synced_at').notNull().defaultNow(),
 });
 

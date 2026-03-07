@@ -22,6 +22,15 @@ provider:
       throttle:
         burstLimit: 200
         rateLimit: 100
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+          Resource:
+            - arn:aws:s3:::nsbi-meetings/*
   environment:
     STAGE: ${self:custom.stage}
     DB_HOST: ${env:DB_HOST}
@@ -30,6 +39,7 @@ provider:
     DB_USERNAME: ${env:DB_USERNAME}
     DB_PASSWORD: ${env:DB_PASSWORD}
     FIREFLIES_API_KEY: ${env:FIREFLIES_API_KEY}
+    MEETINGS_BUCKET: ${env:MEETINGS_BUCKET}
 
 functions:
   helloWorld:
@@ -79,6 +89,15 @@ functions:
       - http:
           path: /meetings/{id}/process-participants
           method: get
+          private: true
+
+  processData:
+    handler: src/lambda/meetings/process-data.handler
+    timeout: 300
+    events:
+      - http:
+          path: /meetings/{id}/process-data
+          method: post
           private: true
 
 custom:

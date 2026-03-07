@@ -223,6 +223,73 @@ Reads the `analytics.speakers` array from a stored meeting record and creates a 
 
 ---
 
+## `processData`
+
+**File:** `src/lambda/meetings/process-data.ts`
+**Trigger:** `POST /meetings/{id}/process-data`
+
+### Purpose
+Downloads the full meeting transcript from the Fireflies.ai GraphQL API and persists it to S3. Also streams the meeting audio to S3. Marks the meeting as `data_processed = true` in the database so subsequent calls return immediately without re-fetching.
+
+### Path Parameters
+| Param | Type | Description |
+|-------|------|-------------|
+| `id` | string | Meeting ID from the `meetings` table |
+
+### Response — Success, first call (`200`)
+```json
+{
+  "success": true,
+  "message": "Data saved to s3://nsbi-meetings/{id}/data.json. Audio saved to s3://nsbi-meetings/{id}/audio.mp3",
+  "data": {
+    "alreadyProcessed": false,
+    "dataKey": "{id}/data.json",
+    "audioKey": "{id}/audio.mp3",
+    "audioSkipped": false
+  }
+}
+```
+
+### Response — Already processed (`200`)
+```json
+{
+  "success": true,
+  "message": "Already processed",
+  "data": { "alreadyProcessed": true }
+}
+```
+
+### Error Responses
+| Status | Condition |
+|--------|-----------|
+| `400` | Missing `id` path parameter |
+| `404` | Meeting not found in the database |
+| `500` | Fireflies API error, S3 upload failure, or missing env vars |
+
+### S3 Layout
+| Object | Path |
+|--------|------|
+| Full transcript JSON | `s3://nsbi-meetings/{id}/data.json` |
+| Meeting audio MP3 | `s3://nsbi-meetings/{id}/audio.mp3` |
+
+### Environment Variables
+| Variable | Description |
+|----------|-------------|
+| `FIREFLIES_API_KEY` | Bearer token for Fireflies.ai GraphQL API |
+| `MEETINGS_BUCKET` | S3 bucket name (`nsbi-meetings`) |
+
+### Business Logic Location
+`src/services/meetings/process-data-service.ts`
+
+### Notes
+- Idempotent — safe to call multiple times; subsequent calls return `alreadyProcessed: true` instantly
+- Audio upload is streamed directly (no buffering) using `fetch` + AWS SDK v3 streaming body
+- If `audio_url` is absent or the download fails, audio is skipped and `audioSkipped: true` is returned
+- Timeout is 300 seconds (5 minutes) to accommodate large audio uploads
+- Requires the `nsbi-meetings` S3 bucket to exist in `us-east-1`
+
+---
+
 ## Adding a New Lambda Function
 
 1. Create `src/lambda/<group>/<trigger>.ts` with a single exported `handler`
