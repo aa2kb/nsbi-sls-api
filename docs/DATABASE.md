@@ -1,0 +1,101 @@
+# Database
+
+This project uses **PostgreSQL** with **Drizzle ORM** for type-safe database access.
+
+## Connection
+
+The DB connection is managed as a singleton `pg.Pool` in `src/db/index.ts`. The pool is initialized lazily (on first call) and limited to **1 connection** — this is intentional for Lambda environments where each function instance handles one request at a time.
+
+```typescript
+// src/db/index.ts
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT ?? 5432),
+  database: process.env.DB_NAME,
+  user: process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
+  ssl: { rejectUnauthorized: false },
+  max: 1,
+  idleTimeoutMillis: 30000,
+});
+
+export const db = drizzle(pool, { schema });
+```
+
+**SSL** is required for all environments. Set `rejectUnauthorized: false` to allow self-signed certificates (e.g., RDS with SSL).
+
+---
+
+## Schema
+
+Defined in `src/db/schema.ts`. The schema is the single source of truth — Drizzle generates TypeScript types and SQL migrations from it.
+
+### `users` table
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| `id` | `uuid` | Primary key, auto-generated (`gen_random_uuid()`) |
+| `name` | `varchar(255)` | NOT NULL |
+| `email` | `varchar(255)` | NOT NULL, UNIQUE |
+| `created_at` | `timestamp` | NOT NULL, default `now()` |
+| `updated_at` | `timestamp` | NOT NULL, default `now()` |
+
+**Inferred TypeScript types:**
+```typescript
+type User    = typeof users.$inferSelect;  // full row
+type NewUser = typeof users.$inferInsert;  // insert payload
+```
+
+---
+
+## Migrations
+
+Migrations are stored in `drizzle/` and managed by Drizzle Kit.
+
+### Workflow
+
+1. **Edit the schema** in `src/db/schema.ts`
+2. **Generate a migration** — Drizzle Kit diffs the schema against the last snapshot:
+   ```bash
+   pnpm run db:generate
+   ```
+   This creates a new `.sql` file in `drizzle/` and updates `drizzle/meta/`.
+
+3. **Apply the migration** to the live database:
+   ```bash
+   pnpm run db:migrate
+   ```
+   Runs `scripts/drizzle-migrate.ts`, which connects to the DB and executes pending migrations.
+
+### Migration Files
+
+| File | Description |
+|------|-------------|
+| `drizzle/0000_grey_grandmaster.sql` | Initial schema — creates `users` table |
+| `drizzle/meta/_journal.json` | Migration history journal |
+| `drizzle/meta/0000_snapshot.json` | Schema snapshot after migration `0000` |
+
+---
+
+## Scripts
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `db:generate` | `drizzle-kit generate` | Generate SQL migration from schema changes |
+| `db:migrate` | `tsx scripts/drizzle-migrate.ts` | Apply pending migrations to DB |
+| `db:push` | `drizzle-kit push` | Push schema directly (bypasses migration files — dev only) |
+| `db:studio` | `drizzle-kit studio` | Open Drizzle Studio (visual DB browser) |
+
+> **Warning:** `db:push` skips the migration journal and should only be used during early development. Always use `db:generate` + `db:migrate` in shared environments.
+
+---
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DB_HOST` | PostgreSQL host |
+| `DB_PORT` | PostgreSQL port (default: `5432`) |
+| `DB_NAME` | Database name |
+| `DB_USERNAME` | Database user |
+| `DB_PASSWORD` | Database password |

@@ -1,0 +1,81 @@
+service: nsbi-sls-api
+
+useDotenv: true
+
+plugins:
+  - serverless-offline
+  - serverless-prune-plugin
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${self:custom.stage}
+  region: us-east-1
+  profile: nsbi
+  memorySize: 1024
+  logRetentionInDays: 7
+  apiGateway:
+    apiKeys:
+      - name: nsbi-api-key-${self:custom.stage}
+        description: API key for NSBI API ${self:custom.stage} environment
+    usagePlan:
+      throttle:
+        burstLimit: 200
+        rateLimit: 100
+  environment:
+    STAGE: ${self:custom.stage}
+    DB_HOST: ${env:DB_HOST}
+    DB_PORT: ${env:DB_PORT}
+    DB_NAME: ${env:DB_NAME}
+    DB_USERNAME: ${env:DB_USERNAME}
+    DB_PASSWORD: ${env:DB_PASSWORD}
+
+functions:
+  helloWorld:
+    handler: src/lambda/hello/hello.handler
+    timeout: 30
+    events:
+      - http:
+          path: /hello
+          method: get
+          private: true
+
+  listUsers:
+    handler: src/lambda/users/list-users.handler
+    timeout: 30
+    events:
+      - http:
+          path: /users
+          method: get
+          private: true
+
+  createUser:
+    handler: src/lambda/users/create-user.handler
+    timeout: 30
+    events:
+      - http:
+          path: /users
+          method: post
+          private: true
+
+custom:
+  stage: ${opt:stage, 'dev'}
+  allowedStages:
+    - dev
+    - prod
+
+  # Prune old Lambda versions - keep only 1 version
+  prune:
+    automatic: true
+    number: 1
+
+build:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node22
+    platform: node
+    format: esm
+    banner:
+      js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);"

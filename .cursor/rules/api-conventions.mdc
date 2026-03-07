@@ -1,0 +1,42 @@
+---
+description: API design conventions — all listing endpoints must be paginated
+globs: src/lambda/**/*.ts
+alwaysApply: false
+---
+
+# API Conventions
+
+## Listing Endpoints
+**All list/listing APIs must be paginated.** Never return all records without pagination.
+
+### Query Parameters
+| Param | Default | Min | Max |
+|-------|---------|-----|-----|
+| `page` | 1 | 1 | — |
+| `limit` | 10 | 1 | 100 |
+
+Optional resource-specific filters (e.g., `assignedTo`, `search`, `status`) are allowed.
+
+### Response Format
+```json
+{
+  "success": true,
+  "message": "Resources retrieved successfully",
+  "data": {
+    "resources": [...],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 42,
+      "totalPages": 5,
+      "hasNext": true,
+      "hasPrevious": false
+    }
+  }
+}
+```
+
+### Pagination Metadata
+- `totalPages` = `Math.ceil(total / limit)`
+- `hasNext` = current page < totalPages
+- `hasPrevious` = current page > 1

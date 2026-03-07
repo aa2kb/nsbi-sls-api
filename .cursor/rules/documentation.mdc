@@ -1,0 +1,32 @@
+---
+description: Documentation structure and file placement rules
+alwaysApply: true
+---
+
+# Documentation Rules
+
+## File Placement
+- All `.md` files go in `docs/` — **no exceptions except `README.md`** at the project root
+- Never create markdown files (guides, references, quickstarts, etc.) in the root directory
+
+## File Naming
+- Use uppercase with underscores: `LAMBDA_FUNCTIONS.md`, `FEATURE_NAME.md`
+
+## Every Feature Gets a Doc
+Every new feature must have a README in `docs/` covering:
+- What it does, how it works, how to use it, key implementation details
+
+## Lambda Documentation
+Every new Lambda handler must be added to `docs/LAMBDA_FUNCTIONS.md`.
+
+## Documentation Reference Table
+Every new `docs/*.md` file must be added to the reference table in the root `README.md`:
+
+```markdown
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Lambda Functions](docs/LAMBDA_FUNCTIONS.md) | All Lambda handlers, triggers, and config |
+| [Feature Name](docs/FEATURE_NAME.md) | Description of the feature |
+```

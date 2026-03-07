@@ -1,0 +1,46 @@
+---
+description: Lambda handler organization, structure, and response format rules
+globs: src/lambda/**/*.ts
+alwaysApply: false
+---
+
+# Lambda Handler Rules
+
+## Organization
+- `lambda/` contains **only handler functions** — one handler per file
+- Business logic lives outside `lambda/` (e.g., `src/services/`, `src/utils/`)
+- Handlers are thin wrappers that orchestrate calls to other modules
+
+## Folder Structure
+```
+src/
+  lambda/
+    feature-name/
+      feature-trigger.ts
+      feature-ingestion.ts
+    api/
+      get-resource.ts
+      update-resource.ts
+  services/
+    feature-name/
+      feature-service.ts
+  utils/
+    validators.ts
+```
+
+## Response Format
+**Always use `buildResponse`** from `src/utils/response.ts`. Never manually construct `{ statusCode, headers, body }`.
+
+```typescript
+import { buildResponse } from '../../utils/response';
+
+// ✅ Success
+return buildResponse(200, true, 'Operation completed successfully', { data });
+
+// ✅ Error
+return buildResponse(500, false, 'Operation failed', { error: (error as Error).message });
+```
+
+## Documentation
+Every new Lambda handler must be documented in `docs/LAMBDA_FUNCTIONS.md` with:
+- Purpose, trigger, timeout, memory, business logic location

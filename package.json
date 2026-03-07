@@ -1,0 +1,57 @@
+{
+  "name": "nsbi-sls-api",
+  "version": "1.0.0",
+  "description": "NSBI Serverless API",
+  "homepage": "https://github.com/aa2kb/nsbi-sls-api#readme",
+  "bugs": {
+    "url": "https://github.com/aa2kb/nsbi-sls-api/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aa2kb/nsbi-sls-api.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "validate:stage": "node scripts/validate-stage.js",
+    "deploy": "pnpm validate:stage && pnpm exec sls deploy",
+    "deploy:dev": "pnpm validate:stage --stage=dev && pnpm exec sls deploy --stage dev",
+    "deploy:prod": "pnpm validate:stage --stage=prod && pnpm exec sls deploy --stage prod",
+    "offline": "sls offline --stage dev",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/drizzle-migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.992.0",
+    "@aws-sdk/lib-dynamodb": "^3.992.0",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
+    "pg": "^8.20.0",
+    "zod": "^4.3.6"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^25.2.0",
+    "@types/pg": "^8.18.0",
+    "drizzle-kit": "^0.31.9",
+    "esbuild": "^0.24.0",
+    "serverless": "^4.7.0",
+    "serverless-offline": "^14.4.0",
+    "serverless-prune-plugin": "^2.1.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3"
+  }
+}
