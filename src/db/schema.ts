@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, text, jsonb, doublePrecision, bigint, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, text, jsonb, doublePrecision, bigint, boolean, unique } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -28,6 +28,7 @@ export const meetings = pgTable('meetings', {
   meetingAttendees: jsonb('meeting_attendees'),
   meetingAttendance: jsonb('meeting_attendance'),
   processed: boolean('processed').notNull().default(false),
+  participantsProcessed: boolean('participants_processed').notNull().default(false),
   syncedAt: timestamp('synced_at').notNull().defaultNow(),
 });
 
@@ -39,3 +40,15 @@ export const cache = pgTable('cache', {
   value: text('value').notNull(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
+
+export const meetingParticipants = pgTable('meeting_participants', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  speakerName: varchar('speaker_name', { length: 255 }).notNull(),
+  meetingId: varchar('meeting_id', { length: 255 }).notNull().references(() => meetings.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => [
+  unique('meeting_participants_meeting_id_speaker_name_unique').on(table.meetingId, table.speakerName),
+]);
+
+export type MeetingParticipant = typeof meetingParticipants.$inferSelect;
+export type NewMeetingParticipant = typeof meetingParticipants.$inferInsert;

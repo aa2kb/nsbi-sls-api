@@ -72,6 +72,15 @@ functions:
           enabled: true
           description: Daily sync of meetings from Fireflies
 
+  processParticipants:
+    handler: src/lambda/meetings/process-participants.handler
+    timeout: 30
+    events:
+      - http:
+          path: /meetings/{id}/process-participants
+          method: get
+          private: true
+
 custom:
   stage: ${opt:stage, 'dev'}
   allowedStages:

@@ -180,6 +180,49 @@ Fetches meeting transcripts from the Fireflies.ai GraphQL API. Supports both on-
 
 ---
 
+## `processParticipants`
+
+**File:** `src/lambda/meetings/process-participants.ts`
+**Trigger:** `GET /meetings/{id}/process-participants`
+
+### Purpose
+Reads the `analytics.speakers` array from a stored meeting record and creates a `meeting_participants` row for each speaker. When speaker names are generic (e.g. `Speaker 1`, `Speaker 2`), real names are inferred from the meeting title using the pattern `Name [info] <> Name [info]`. Segments that resolve to bare phone numbers are kept as the original generic label. Duplicate participants (same name + meeting) are silently skipped via a unique constraint.
+
+### Path Parameters
+| Param | Type | Description |
+|-------|------|-------------|
+| `id` | string | Meeting ID from the `meetings` table |
+
+### Response — Success (`200`)
+```json
+{
+  "success": true,
+  "message": "Participants processed — 2 created, 0 already existed",
+  "data": {
+    "created": 2,
+    "skipped": 0,
+    "participants": ["Brandon Conyers", "Jake Priszner"]
+  }
+}
+```
+
+### Error Responses
+| Status | Condition |
+|--------|-----------|
+| `400` | Missing `id` path parameter |
+| `404` | Meeting not found |
+| `500` | Unexpected server error |
+
+### Business Logic Location
+`src/services/meetings/participant-service.ts`
+
+### Notes
+- Idempotent — safe to call multiple times; existing participants are skipped
+- Name resolution order: analytics speaker name → title extraction → original generic name
+- Title parsing handles: `Name [info] <> Name [info]` and bare phone numbers on either side
+
+---
+
 ## Adding a New Lambda Function
 
 1. Create `src/lambda/<group>/<trigger>.ts` with a single exported `handler`

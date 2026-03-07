@@ -22,6 +22,20 @@
       "when": 1772907480779,
       "tag": "0002_foamy_strong_guy",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772909088452,
+      "tag": "0003_bumpy_misty_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772910176652,
+      "tag": "0004_slim_tarot",
+      "breakpoints": true
     }
   ]
 }
