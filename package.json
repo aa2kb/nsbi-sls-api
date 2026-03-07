@@ -33,6 +33,8 @@
     "@aws-sdk/lib-dynamodb": "^3.992.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
+    "graphql": "^16.13.1",
+    "graphql-request": "^7.4.0",
     "pg": "^8.20.0",
     "zod": "^4.3.6"
   },

@@ -8,6 +8,13 @@
       "when": 1772889307804,
       "tag": "0000_grey_grandmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772905482925,
+      "tag": "0001_third_mantis",
+      "breakpoints": true
     }
   ]
 }

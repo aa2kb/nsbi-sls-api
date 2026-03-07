@@ -134,6 +134,52 @@ Creates a new user record in the database. Validates input with Zod and handles 
 
 ---
 
+## `fetchMeetings`
+
+**File:** `src/lambda/meetings/fetch-meetings.ts`
+**Trigger:** `GET /meetings/fetch` + EventBridge schedule (`rate(1 day)`)
+
+### Purpose
+Fetches meeting transcripts from the Fireflies.ai GraphQL API. Supports both on-demand HTTP requests and a daily automated sync via EventBridge.
+
+### Query Parameters (HTTP only)
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `fromDate` | ISO 8601 string | `2026-02-27T00:00:00.000Z` | Fetch transcripts from this date |
+| `userId` | string | — | Filter by a specific Fireflies user ID |
+
+### Response — Success (`200`)
+```json
+{
+  "success": true,
+  "message": "Meetings fetched successfully",
+  "data": {
+    "meetings": [...],
+    "count": 5
+  }
+}
+```
+
+### Error Responses
+| Status | Condition |
+|--------|-----------|
+| `500` | Fireflies API error or missing `FIREFLIES_API_KEY` |
+
+### Environment Variables
+| Variable | Description |
+|----------|-------------|
+| `FIREFLIES_API_KEY` | Bearer token for Fireflies.ai GraphQL API |
+
+### Business Logic Location
+`src/services/meetings/meeting-service.ts`
+
+### Notes
+- Uses `graphql-request` to call `https://api.fireflies.ai/graphql`
+- On scheduled invocation the handler logs results but returns no HTTP response
+- Schedule fires once per day (`rate(1 day)`) via EventBridge
+
+---
+
 ## Adding a New Lambda Function
 
 1. Create `src/lambda/<group>/<trigger>.ts` with a single exported `handler`

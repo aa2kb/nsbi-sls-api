@@ -63,3 +63,4 @@ pnpm run deploy:prod
 | [Lambda Functions](docs/LAMBDA_FUNCTIONS.md) | All Lambda handlers — purpose, config, and triggers |
 | [API Reference](docs/API_REFERENCE.md) | All API endpoints, request/response schemas |
 | [Database](docs/DATABASE.md) | Schema, migrations, and Drizzle ORM usage |
+| [Meetings](docs/MEETINGS.md) | Fireflies.ai meeting transcript sync — HTTP and scheduled |
