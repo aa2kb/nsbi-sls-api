@@ -2,24 +2,16 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { meetings, meetingParticipants } from '../../db/schema.js';
 
-interface Speaker {
+interface AttendanceRecord {
   name: string;
-  speaker_id: number;
-  duration: number;
-  word_count: number;
-  duration_pct: number;
-  filler_words: number;
-  monologues_count: number;
-  questions: number;
-  words_per_minute: number;
-  longest_monologue: number;
+  join_time?: string;
+  leave_time?: string;
 }
 
-interface Analytics {
-  speakers?: Speaker[];
-}
+export type ParticipantSource = 'attendance' | 'title' | 'none';
 
 export interface ProcessParticipantsResult {
+  source: ParticipantSource;
   created: number;
   skipped: number;
   participants: string[];
@@ -32,26 +24,30 @@ export class MeetingNotFoundError extends Error {
   }
 }
 
-function isGenericSpeakerName(name: string): boolean {
-  return /^Speaker\s+\d+$/i.test(name.trim());
-}
-
 /**
  * Extracts real names from a meeting title.
  * Title format: "Brandon Conyers [+12066292299] <> Jake Priszner [157]"
  * Returns names in order: [leftName, rightName]. A slot is null when the
  * segment is a bare phone number with no preceding alphabetic name.
  */
-function extractNamesFromTitle(title: string): (string | null)[] {
+function extractNamesFromTitle(title: string): string[] {
   const segments = title.split('<>').map((s) => s.trim());
-  return segments.map((segment) => {
+  return segments.reduce<string[]>((acc, segment) => {
     const match = segment.match(/^(.+?)\s*\[/);
-    if (!match) return null;
+    if (!match) return acc;
     const candidate = match[1].trim();
     // Reject bare phone numbers (e.g. "+15087367050")
-    if (/^\+?\d[\d\s\-().]+$/.test(candidate)) return null;
-    return candidate;
-  });
+    if (/^\+?\d[\d\s\-().]+$/.test(candidate)) return acc;
+    acc.push(candidate);
+    return acc;
+  }, []);
+}
+
+function getNamesFromAttendance(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r): r is AttendanceRecord => r !== null && typeof r === 'object' && typeof r.name === 'string' && r.name.trim() !== '')
+    .map((r) => r.name.trim());
 }
 
 export async function processParticipants(meetingId: string): Promise<ProcessParticipantsResult> {
@@ -65,30 +61,33 @@ export async function processParticipants(meetingId: string): Promise<ProcessPar
     throw new MeetingNotFoundError(meetingId);
   }
 
-  const analytics = meeting.analytics as Analytics | null;
-  const speakers: Speaker[] = analytics?.speakers ?? [];
+  console.log(`[ParticipantService] Processing meeting "${meeting.title}" (${meetingId})`);
+  console.log(`[ParticipantService] meetingAttendance raw:`, JSON.stringify(meeting.meetingAttendance));
 
-  console.log(`[ParticipantService] Meeting "${meeting.title}" has ${speakers.length} speaker(s)`);
+  // --- Source priority: attendance → title → none ---
+  let resolvedNames: string[] = [];
+  let source: ParticipantSource = 'none';
 
-  const hasGenericNames = speakers.some((s) => isGenericSpeakerName(s.name));
-  let titleNames: (string | null)[] = [];
+  const attendanceNames = getNamesFromAttendance(meeting.meetingAttendance);
 
-  if (hasGenericNames && meeting.title) {
-    titleNames = extractNamesFromTitle(meeting.title);
-    console.log(`[ParticipantService] Generic speaker names detected — extracted from title:`, titleNames);
+  if (attendanceNames.length > 0) {
+    source = 'attendance';
+    resolvedNames = attendanceNames;
+    console.log(`[ParticipantService] Source: attendance (${attendanceNames.length} attendee(s)):`, attendanceNames);
+  } else if (meeting.title) {
+    const titleNames = extractNamesFromTitle(meeting.title);
+    if (titleNames.length > 0) {
+      source = 'title';
+      resolvedNames = titleNames;
+      console.log(`[ParticipantService] Source: title — attendance empty, extracted from "${meeting.title}":`, titleNames);
+    } else {
+      console.log(`[ParticipantService] Source: none — attendance empty and title yielded no names`);
+    }
+  } else {
+    console.log(`[ParticipantService] Source: none — no attendance data and no title`);
   }
 
-  const resolvedNames: string[] = speakers.map((speaker) => {
-    if (isGenericSpeakerName(speaker.name)) {
-      const titleName = titleNames[speaker.speaker_id] ?? null;
-      if (titleName) {
-        console.log(`[ParticipantService] Resolved "${speaker.name}" → "${titleName}" via title`);
-        return titleName;
-      }
-    }
-    return speaker.name;
-  });
-
+  // --- Insert participants ---
   let created = 0;
   let skipped = 0;
   const participantNames: string[] = [];
@@ -102,13 +101,12 @@ export async function processParticipants(meetingId: string): Promise<ProcessPar
 
     if (result.length > 0) {
       created++;
-      participantNames.push(name);
-      console.log(`[ParticipantService] Created participant "${name}" for meeting ${meetingId}`);
+      console.log(`[ParticipantService] Created participant "${name}"`);
     } else {
       skipped++;
-      participantNames.push(name);
-      console.log(`[ParticipantService] Skipped duplicate participant "${name}" for meeting ${meetingId}`);
+      console.log(`[ParticipantService] Skipped duplicate "${name}"`);
     }
+    participantNames.push(name);
   }
 
   await db
@@ -116,7 +114,7 @@ export async function processParticipants(meetingId: string): Promise<ProcessPar
     .set({ participantsProcessed: true })
     .where(eq(meetings.id, meetingId));
 
-  console.log(`[ParticipantService] Done — created=${created} skipped=${skipped} | meeting marked as participant_processed`);
+  console.log(`[ParticipantService] Done — source=${source} created=${created} skipped=${skipped}`);
 
-  return { created, skipped, participants: participantNames };
+  return { source, created, skipped, participants: participantNames };
 }

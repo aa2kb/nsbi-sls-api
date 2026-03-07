@@ -17,7 +17,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return buildResponse(
       200,
       true,
-      `Participants processed — ${result.created} created, ${result.skipped} already existed`,
+      `Participants processed via ${result.source} — ${result.created} created, ${result.skipped} already existed`,
       result,
     );
   } catch (error) {
