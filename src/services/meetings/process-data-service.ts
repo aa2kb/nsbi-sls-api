@@ -2,7 +2,10 @@ import { GraphQLClient, gql } from 'graphql-request';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { meetings } from '../../db/schema.js';
-import { getMeetingsBucket, uploadJson, uploadStream } from '../../utils/s3.js';
+import { createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
+import { getMeetingsBucket, uploadJson, uploadFileAndCleanup } from '../../utils/s3.js';
 
 const FIREFLIES_API_URL = 'https://api.fireflies.ai/graphql';
 
@@ -126,8 +129,11 @@ export async function processData(meetingId: string): Promise<ProcessDataResult>
       console.warn(`[ProcessData] Failed to download audio (status ${audioResponse.status}) — skipping`);
       audioSkipped = true;
     } else {
+      const tmpPath = `/tmp/${meetingId}_audio.mp3`;
+      console.log(`[ProcessData] Downloading audio to ${tmpPath}`);
+      await pipeline(Readable.fromWeb(audioResponse.body as never), createWriteStream(tmpPath));
       console.log(`[ProcessData] Uploading audio to s3://${bucket}/${audioKey}`);
-      await uploadStream(bucket, audioKey, audioResponse.body, 'audio/mpeg');
+      await uploadFileAndCleanup(bucket, audioKey, tmpPath, 'audio/mpeg');
     }
   } else {
     console.log('[ProcessData] No audio URL available — skipping audio upload');

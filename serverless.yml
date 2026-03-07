@@ -97,7 +97,7 @@ functions:
     events:
       - http:
           path: /meetings/{id}/process-data
-          method: post
+          method: get
           private: true
 
 custom:
