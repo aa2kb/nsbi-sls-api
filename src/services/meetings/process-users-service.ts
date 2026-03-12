@@ -2,6 +2,7 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 import { eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { meetings, meetingParticipants, users } from '../../db/schema.js';
+import { startProcessLog, endProcessLog } from './process-log-service.js';
 
 const BEDROCK_REGION = 'us-east-1';
 const BEDROCK_MODEL_ID = 'us.anthropic.claude-sonnet-4-6';
@@ -116,77 +117,85 @@ export async function processUsers(meetingId: string): Promise<ProcessUsersResul
     throw new MeetingNotReadyError(meetingId, 'meeting.participants is empty — no emails to process');
   }
 
-  const speakerRows = await db
-    .select()
-    .from(meetingParticipants)
-    .where(eq(meetingParticipants.meetingId, meetingId));
+  const logId = await startProcessLog(meetingId, 'users');
 
-  const speakerNames = speakerRows.map((r) => r.speakerName);
+  try {
+    const speakerRows = await db
+      .select()
+      .from(meetingParticipants)
+      .where(eq(meetingParticipants.meetingId, meetingId));
 
-  console.log(`[ProcessUsers] Calling LLM to match ${participantEmails.length} emails to ${speakerNames.length} speakers`);
-  const matches = await matchEmailsToSpeakers(participantEmails, speakerNames);
+    const speakerNames = speakerRows.map((r) => r.speakerName);
 
-  // Upsert users — insert if email doesn't exist yet, skip if it does
-  let usersCreated = 0;
-  const emailToUserId = new Map<string, string>();
+    console.log(`[ProcessUsers] Calling LLM to match ${participantEmails.length} emails to ${speakerNames.length} speakers`);
+    const matches = await matchEmailsToSpeakers(participantEmails, speakerNames);
 
-  for (const match of matches) {
-    const existing = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, match.email))
-      .limit(1);
+    // Upsert users — insert if email doesn't exist yet, skip if it does
+    let usersCreated = 0;
+    const emailToUserId = new Map<string, string>();
 
-    if (existing.length > 0) {
-      emailToUserId.set(match.email, existing[0].id);
-      console.log(`[ProcessUsers] User already exists for ${match.email} — skipping insert`);
-    } else {
-      const [inserted] = await db
-        .insert(users)
-        .values({ name: match.name, email: match.email })
-        .returning({ id: users.id });
+    for (const match of matches) {
+      const existing = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, match.email))
+        .limit(1);
 
-      emailToUserId.set(match.email, inserted.id);
-      usersCreated++;
-      console.log(`[ProcessUsers] Created user ${match.name} <${match.email}>`);
-    }
-  }
-
-  // Link meeting_participants rows to their user via user_id
-  let usersMatched = 0;
-  const speakerMap = new Map(speakerRows.map((r) => [r.speakerName.toLowerCase(), r]));
-
-  const resultMatches: ProcessUsersResult['matches'] = [];
-
-  for (const match of matches) {
-    const userId = emailToUserId.get(match.email);
-    if (!userId) continue;
-
-    resultMatches.push({ email: match.email, speakerName: match.speakerName, userId });
-
-    if (match.speakerName) {
-      const participant = speakerMap.get(match.speakerName.toLowerCase());
-      if (participant) {
-        await db
-          .update(meetingParticipants)
-          .set({ userId })
-          .where(eq(meetingParticipants.id, participant.id));
-        usersMatched++;
-        console.log(`[ProcessUsers] Linked participant "${match.speakerName}" → user ${userId}`);
+      if (existing.length > 0) {
+        emailToUserId.set(match.email, existing[0].id);
+        console.log(`[ProcessUsers] User already exists for ${match.email} — skipping insert`);
       } else {
-        console.warn(`[ProcessUsers] No meeting_participant row found for speaker "${match.speakerName}"`);
+        const [inserted] = await db
+          .insert(users)
+          .values({ name: match.name, email: match.email })
+          .returning({ id: users.id });
+
+        emailToUserId.set(match.email, inserted.id);
+        usersCreated++;
+        console.log(`[ProcessUsers] Created user ${match.name} <${match.email}>`);
       }
     }
+
+    // Link meeting_participants rows to their user via user_id
+    let usersMatched = 0;
+    const speakerMap = new Map(speakerRows.map((r) => [r.speakerName.toLowerCase(), r]));
+
+    const resultMatches: ProcessUsersResult['matches'] = [];
+
+    for (const match of matches) {
+      const userId = emailToUserId.get(match.email);
+      if (!userId) continue;
+
+      resultMatches.push({ email: match.email, speakerName: match.speakerName, userId });
+
+      if (match.speakerName) {
+        const participant = speakerMap.get(match.speakerName.toLowerCase());
+        if (participant) {
+          await db
+            .update(meetingParticipants)
+            .set({ userId })
+            .where(eq(meetingParticipants.id, participant.id));
+          usersMatched++;
+          console.log(`[ProcessUsers] Linked participant "${match.speakerName}" → user ${userId}`);
+        } else {
+          console.warn(`[ProcessUsers] No meeting_participant row found for speaker "${match.speakerName}"`);
+        }
+      }
+    }
+
+    await db
+      .update(meetings)
+      .set({ usersProcessed: true, syncedAt: sql`now()` })
+      .where(eq(meetings.id, meetingId));
+
+    console.log(
+      `[ProcessUsers] Meeting ${meetingId} — ${usersCreated} users created, ${usersMatched} participants linked`,
+    );
+
+    await endProcessLog(logId, true);
+    return { alreadyProcessed: false, usersCreated, usersMatched, matches: resultMatches };
+  } catch (error) {
+    await endProcessLog(logId, false);
+    throw error;
   }
-
-  await db
-    .update(meetings)
-    .set({ usersProcessed: true, syncedAt: sql`now()` })
-    .where(eq(meetings.id, meetingId));
-
-  console.log(
-    `[ProcessUsers] Meeting ${meetingId} — ${usersCreated} users created, ${usersMatched} participants linked`,
-  );
-
-  return { alreadyProcessed: false, usersCreated, usersMatched, matches: resultMatches };
 }

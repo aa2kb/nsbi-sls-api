@@ -71,3 +71,17 @@ export const tasks = pgTable('tasks', {
 
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
+
+export const processLogs = pgTable('process_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  meetingId: varchar('meeting_id', { length: 255 }).notNull().references(() => meetings.id),
+  processType: varchar('process_type', { length: 50 }).notNull(),
+  startTime: timestamp('start_time').notNull().defaultNow(),
+  endTime: timestamp('end_time'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  inProgress: boolean('in_progress').notNull().default(true),
+  success: boolean('success'),
+});
+
+export type ProcessLog = typeof processLogs.$inferSelect;
+export type NewProcessLog = typeof processLogs.$inferInsert;

@@ -50,6 +50,13 @@
       "when": 1773348220736,
       "tag": "0006_military_morbius",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1773351967648,
+      "tag": "0007_simple_joseph",
+      "breakpoints": true
     }
   ]
 }

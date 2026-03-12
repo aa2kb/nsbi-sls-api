@@ -2,6 +2,7 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { meetings, meetingParticipants, tasks } from '../../db/schema.js';
+import { startProcessLog, endProcessLog } from './process-log-service.js';
 import { getMeetingsBucket, getJson } from '../../utils/s3.js';
 
 const BEDROCK_REGION = 'us-east-1';
@@ -144,62 +145,71 @@ export async function processTasks(meetingId: string): Promise<ProcessTasksResul
     throw new MeetingNotReadyError(meetingId, missing);
   }
 
-  const bucket = getMeetingsBucket();
-  const dataKey = `${meetingId}/data.json`;
+  const logId = await startProcessLog(meetingId, 'tasks');
 
-  console.log(`[ProcessTasks] Reading transcript from s3://${bucket}/${dataKey}`);
-  const rawJson = await getJson(bucket, dataKey);
-  const transcriptData = JSON.parse(rawJson) as Record<string, unknown>;
-  const transcriptText = transcriptToText(transcriptData);
+  try {
+    const bucket = getMeetingsBucket();
+    const dataKey = `${meetingId}/data.json`;
 
-  const participants = await db
-    .select()
-    .from(meetingParticipants)
-    .where(eq(meetingParticipants.meetingId, meetingId));
+    console.log(`[ProcessTasks] Reading transcript from s3://${bucket}/${dataKey}`);
+    const rawJson = await getJson(bucket, dataKey);
+    const transcriptData = JSON.parse(rawJson) as Record<string, unknown>;
+    const transcriptText = transcriptToText(transcriptData);
 
-  if (participants.length === 0) {
-    console.warn(`[ProcessTasks] No participants found for meeting ${meetingId}`);
+    const participants = await db
+      .select()
+      .from(meetingParticipants)
+      .where(eq(meetingParticipants.meetingId, meetingId));
+
+    if (participants.length === 0) {
+      console.warn(`[ProcessTasks] No participants found for meeting ${meetingId}`);
+      await db
+        .update(meetings)
+        .set({ taskProcessed: true, syncedAt: sql`now()` })
+        .where(eq(meetings.id, meetingId));
+      await endProcessLog(logId, true);
+      return { alreadyProcessed: false, tasksCreated: 0 };
+    }
+
+    const participantNames = participants.map((p) => p.speakerName);
+    console.log(`[ProcessTasks] Calling LLM for ${participantNames.length} participants`);
+
+    const llmTasks = await callLlm(transcriptText, participantNames);
+    console.log(`[ProcessTasks] LLM returned ${llmTasks.length} tasks`);
+
+    const participantMap = new Map(participants.map((p) => [p.speakerName.toLowerCase(), p]));
+
+    const taskInserts = llmTasks
+      .map((t) => {
+        const participant = participantMap.get(t.participant_name.toLowerCase());
+        if (!participant) {
+          console.warn(`[ProcessTasks] Participant "${t.participant_name}" not found — skipping task`);
+          return null;
+        }
+        return {
+          participantId: participant.id,
+          meetingId,
+          taskTitle: t.taskTitle,
+          taskDescription: t.taskDescription,
+        };
+      })
+      .filter((t): t is NonNullable<typeof t> => t !== null);
+
+    if (taskInserts.length > 0) {
+      await db.insert(tasks).values(taskInserts);
+    }
+
     await db
       .update(meetings)
       .set({ taskProcessed: true, syncedAt: sql`now()` })
       .where(eq(meetings.id, meetingId));
-    return { alreadyProcessed: false, tasksCreated: 0 };
+
+    console.log(`[ProcessTasks] Meeting ${meetingId} — ${taskInserts.length} tasks created, marked as task_processed`);
+
+    await endProcessLog(logId, true);
+    return { alreadyProcessed: false, tasksCreated: taskInserts.length };
+  } catch (error) {
+    await endProcessLog(logId, false);
+    throw error;
   }
-
-  const participantNames = participants.map((p) => p.speakerName);
-  console.log(`[ProcessTasks] Calling LLM for ${participantNames.length} participants`);
-
-  const llmTasks = await callLlm(transcriptText, participantNames);
-  console.log(`[ProcessTasks] LLM returned ${llmTasks.length} tasks`);
-
-  const participantMap = new Map(participants.map((p) => [p.speakerName.toLowerCase(), p]));
-
-  const taskInserts = llmTasks
-    .map((t) => {
-      const participant = participantMap.get(t.participant_name.toLowerCase());
-      if (!participant) {
-        console.warn(`[ProcessTasks] Participant "${t.participant_name}" not found — skipping task`);
-        return null;
-      }
-      return {
-        participantId: participant.id,
-        meetingId,
-        taskTitle: t.taskTitle,
-        taskDescription: t.taskDescription,
-      };
-    })
-    .filter((t): t is NonNullable<typeof t> => t !== null);
-
-  if (taskInserts.length > 0) {
-    await db.insert(tasks).values(taskInserts);
-  }
-
-  await db
-    .update(meetings)
-    .set({ taskProcessed: true, syncedAt: sql`now()` })
-    .where(eq(meetings.id, meetingId));
-
-  console.log(`[ProcessTasks] Meeting ${meetingId} — ${taskInserts.length} tasks created, marked as task_processed`);
-
-  return { alreadyProcessed: false, tasksCreated: taskInserts.length };
 }

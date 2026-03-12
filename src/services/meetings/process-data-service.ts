@@ -2,6 +2,7 @@ import { GraphQLClient, gql } from 'graphql-request';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { meetings } from '../../db/schema.js';
+import { startProcessLog, endProcessLog } from './process-log-service.js';
 import { createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
@@ -93,59 +94,67 @@ export async function processData(meetingId: string): Promise<ProcessDataResult>
     return { alreadyProcessed: true };
   }
 
-  const apiKey = process.env.FIREFLIES_API_KEY;
-  if (!apiKey) throw new Error('FIREFLIES_API_KEY environment variable is not set');
+  const logId = await startProcessLog(meetingId, 'data');
 
-  const bucket = getMeetingsBucket();
+  try {
+    const apiKey = process.env.FIREFLIES_API_KEY;
+    if (!apiKey) throw new Error('FIREFLIES_API_KEY environment variable is not set');
 
-  console.log(`[ProcessData] Fetching full transcript for meeting ${meetingId}`);
+    const bucket = getMeetingsBucket();
 
-  const client = new GraphQLClient(FIREFLIES_API_URL, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
+    console.log(`[ProcessData] Fetching full transcript for meeting ${meetingId}`);
 
-  const data = await client.request<FirefliesTranscriptData>(TRANSCRIPT_QUERY, {
-    transcriptId: meetingId,
-  });
+    const client = new GraphQLClient(FIREFLIES_API_URL, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
 
-  const transcript = data.transcript;
-  if (!transcript) {
-    throw new MeetingNotFoundError(meetingId);
-  }
+    const data = await client.request<FirefliesTranscriptData>(TRANSCRIPT_QUERY, {
+      transcriptId: meetingId,
+    });
 
-  const dataKey = `${meetingId}/data.json`;
-  console.log(`[ProcessData] Uploading transcript JSON to s3://${bucket}/${dataKey}`);
-  await uploadJson(bucket, dataKey, JSON.stringify(data, null, 2));
-
-  let audioKey: string | undefined;
-  let audioSkipped = false;
-
-  if (transcript.audio_url) {
-    audioKey = `${meetingId}/audio.mp3`;
-    console.log(`[ProcessData] Downloading audio from ${transcript.audio_url}`);
-    const audioResponse = await fetch(transcript.audio_url);
-
-    if (!audioResponse.ok || !audioResponse.body) {
-      console.warn(`[ProcessData] Failed to download audio (status ${audioResponse.status}) — skipping`);
-      audioSkipped = true;
-    } else {
-      const tmpPath = `/tmp/${meetingId}_audio.mp3`;
-      console.log(`[ProcessData] Downloading audio to ${tmpPath}`);
-      await pipeline(Readable.fromWeb(audioResponse.body as never), createWriteStream(tmpPath));
-      console.log(`[ProcessData] Uploading audio to s3://${bucket}/${audioKey}`);
-      await uploadFileAndCleanup(bucket, audioKey, tmpPath, 'audio/mpeg');
+    const transcript = data.transcript;
+    if (!transcript) {
+      throw new MeetingNotFoundError(meetingId);
     }
-  } else {
-    console.log('[ProcessData] No audio URL available — skipping audio upload');
-    audioSkipped = true;
+
+    const dataKey = `${meetingId}/data.json`;
+    console.log(`[ProcessData] Uploading transcript JSON to s3://${bucket}/${dataKey}`);
+    await uploadJson(bucket, dataKey, JSON.stringify(data, null, 2));
+
+    let audioKey: string | undefined;
+    let audioSkipped = false;
+
+    if (transcript.audio_url) {
+      audioKey = `${meetingId}/audio.mp3`;
+      console.log(`[ProcessData] Downloading audio from ${transcript.audio_url}`);
+      const audioResponse = await fetch(transcript.audio_url);
+
+      if (!audioResponse.ok || !audioResponse.body) {
+        console.warn(`[ProcessData] Failed to download audio (status ${audioResponse.status}) — skipping`);
+        audioSkipped = true;
+      } else {
+        const tmpPath = `/tmp/${meetingId}_audio.mp3`;
+        console.log(`[ProcessData] Downloading audio to ${tmpPath}`);
+        await pipeline(Readable.fromWeb(audioResponse.body as never), createWriteStream(tmpPath));
+        console.log(`[ProcessData] Uploading audio to s3://${bucket}/${audioKey}`);
+        await uploadFileAndCleanup(bucket, audioKey, tmpPath, 'audio/mpeg');
+      }
+    } else {
+      console.log('[ProcessData] No audio URL available — skipping audio upload');
+      audioSkipped = true;
+    }
+
+    await db
+      .update(meetings)
+      .set({ dataProcessed: true, syncedAt: sql`now()` })
+      .where(eq(meetings.id, meetingId));
+
+    console.log(`[ProcessData] Meeting ${meetingId} marked as data_processed`);
+
+    await endProcessLog(logId, true);
+    return { alreadyProcessed: false, dataKey, audioKey, audioSkipped };
+  } catch (error) {
+    await endProcessLog(logId, false);
+    throw error;
   }
-
-  await db
-    .update(meetings)
-    .set({ dataProcessed: true, syncedAt: sql`now()` })
-    .where(eq(meetings.id, meetingId));
-
-  console.log(`[ProcessData] Meeting ${meetingId} marked as data_processed`);
-
-  return { alreadyProcessed: false, dataKey, audioKey, audioSkipped };
 }

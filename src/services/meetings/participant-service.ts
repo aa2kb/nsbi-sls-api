@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { meetings, meetingParticipants } from '../../db/schema.js';
+import { startProcessLog, endProcessLog } from './process-log-service.js';
 
 interface AttendanceRecord {
   name: string;
@@ -61,60 +62,68 @@ export async function processParticipants(meetingId: string): Promise<ProcessPar
     throw new MeetingNotFoundError(meetingId);
   }
 
-  console.log(`[ParticipantService] Processing meeting "${meeting.title}" (${meetingId})`);
-  console.log(`[ParticipantService] meetingAttendance raw:`, JSON.stringify(meeting.meetingAttendance));
+  const logId = await startProcessLog(meetingId, 'participants');
 
-  // --- Source priority: attendance → title → none ---
-  let resolvedNames: string[] = [];
-  let source: ParticipantSource = 'none';
+  try {
+    console.log(`[ParticipantService] Processing meeting "${meeting.title}" (${meetingId})`);
+    console.log(`[ParticipantService] meetingAttendance raw:`, JSON.stringify(meeting.meetingAttendance));
 
-  const attendanceNames = getNamesFromAttendance(meeting.meetingAttendance);
+    // --- Source priority: attendance → title → none ---
+    let resolvedNames: string[] = [];
+    let source: ParticipantSource = 'none';
 
-  if (attendanceNames.length > 0) {
-    source = 'attendance';
-    resolvedNames = attendanceNames;
-    console.log(`[ParticipantService] Source: attendance (${attendanceNames.length} attendee(s)):`, attendanceNames);
-  } else if (meeting.title) {
-    const titleNames = extractNamesFromTitle(meeting.title);
-    if (titleNames.length > 0) {
-      source = 'title';
-      resolvedNames = titleNames;
-      console.log(`[ParticipantService] Source: title — attendance empty, extracted from "${meeting.title}":`, titleNames);
+    const attendanceNames = getNamesFromAttendance(meeting.meetingAttendance);
+
+    if (attendanceNames.length > 0) {
+      source = 'attendance';
+      resolvedNames = attendanceNames;
+      console.log(`[ParticipantService] Source: attendance (${attendanceNames.length} attendee(s)):`, attendanceNames);
+    } else if (meeting.title) {
+      const titleNames = extractNamesFromTitle(meeting.title);
+      if (titleNames.length > 0) {
+        source = 'title';
+        resolvedNames = titleNames;
+        console.log(`[ParticipantService] Source: title — attendance empty, extracted from "${meeting.title}":`, titleNames);
+      } else {
+        console.log(`[ParticipantService] Source: none — attendance empty and title yielded no names`);
+      }
     } else {
-      console.log(`[ParticipantService] Source: none — attendance empty and title yielded no names`);
+      console.log(`[ParticipantService] Source: none — no attendance data and no title`);
     }
-  } else {
-    console.log(`[ParticipantService] Source: none — no attendance data and no title`);
-  }
 
-  // --- Insert participants ---
-  let created = 0;
-  let skipped = 0;
-  const participantNames: string[] = [];
+    // --- Insert participants ---
+    let created = 0;
+    let skipped = 0;
+    const participantNames: string[] = [];
 
-  for (const name of resolvedNames) {
-    const result = await db
-      .insert(meetingParticipants)
-      .values({ speakerName: name, meetingId })
-      .onConflictDoNothing()
-      .returning();
+    for (const name of resolvedNames) {
+      const result = await db
+        .insert(meetingParticipants)
+        .values({ speakerName: name, meetingId })
+        .onConflictDoNothing()
+        .returning();
 
-    if (result.length > 0) {
-      created++;
-      console.log(`[ParticipantService] Created participant "${name}"`);
-    } else {
-      skipped++;
-      console.log(`[ParticipantService] Skipped duplicate "${name}"`);
+      if (result.length > 0) {
+        created++;
+        console.log(`[ParticipantService] Created participant "${name}"`);
+      } else {
+        skipped++;
+        console.log(`[ParticipantService] Skipped duplicate "${name}"`);
+      }
+      participantNames.push(name);
     }
-    participantNames.push(name);
+
+    await db
+      .update(meetings)
+      .set({ participantsProcessed: true })
+      .where(eq(meetings.id, meetingId));
+
+    console.log(`[ParticipantService] Done — source=${source} created=${created} skipped=${skipped}`);
+
+    await endProcessLog(logId, true);
+    return { source, created, skipped, participants: participantNames };
+  } catch (error) {
+    await endProcessLog(logId, false);
+    throw error;
   }
-
-  await db
-    .update(meetings)
-    .set({ participantsProcessed: true })
-    .where(eq(meetings.id, meetingId));
-
-  console.log(`[ParticipantService] Done — source=${source} created=${created} skipped=${skipped}`);
-
-  return { source, created, skipped, participants: participantNames };
 }
