@@ -27,10 +27,15 @@ provider:
       statements:
         - Effect: Allow
           Action:
-            - s3:PutObject
-            - s3:GetObject
+            - s3:*
           Resource:
-            - arn:aws:s3:::nsbi-meetings/*
+            - arn:aws:s3:::*
+            - arn:aws:s3:::*/*
+        - Effect: Allow
+          Action:
+            - bedrock:*
+          Resource:
+            - "*"
   environment:
     STAGE: ${self:custom.stage}
     DB_HOST: ${env:DB_HOST}
