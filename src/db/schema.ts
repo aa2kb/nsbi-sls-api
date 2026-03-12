@@ -30,6 +30,7 @@ export const meetings = pgTable('meetings', {
   processed: boolean('processed').notNull().default(false),
   participantsProcessed: boolean('participants_processed').notNull().default(false),
   dataProcessed: boolean('data_processed').notNull().default(false),
+  taskProcessed: boolean('task_processed').notNull().default(false),
   syncedAt: timestamp('synced_at').notNull().defaultNow(),
 });
 
@@ -53,3 +54,18 @@ export const meetingParticipants = pgTable('meeting_participants', {
 
 export type MeetingParticipant = typeof meetingParticipants.$inferSelect;
 export type NewMeetingParticipant = typeof meetingParticipants.$inferInsert;
+
+export const tasks = pgTable('tasks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  participantId: uuid('participant_id').notNull().references(() => meetingParticipants.id),
+  meetingId: varchar('meeting_id', { length: 255 }).notNull().references(() => meetings.id),
+  taskTitle: text('task_title').notNull(),
+  taskDescription: text('task_description').notNull(),
+  complete: boolean('complete').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  completedAt: timestamp('completed_at'),
+});
+
+export type Task = typeof tasks.$inferSelect;
+export type NewTask = typeof tasks.$inferInsert;

@@ -105,6 +105,15 @@ functions:
           method: get
           private: true
 
+  processTasks:
+    handler: src/lambda/meetings/process-tasks.handler
+    timeout: 300
+    events:
+      - http:
+          path: /meetings/{id}/process-tasks
+          method: post
+          private: true
+
 custom:
   stage: ${opt:stage, 'dev'}
   allowedStages:

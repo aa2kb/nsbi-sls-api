@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { createReadStream } from 'node:fs';
 import { stat, unlink } from 'node:fs/promises';
 
@@ -17,6 +17,14 @@ export function getMeetingsBucket(): string {
   const bucket = process.env.MEETINGS_BUCKET;
   if (!bucket) throw new Error('MEETINGS_BUCKET environment variable is not set');
   return bucket;
+}
+
+export async function getJson(bucket: string, key: string): Promise<string> {
+  const response = await getClient().send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+  );
+  if (!response.Body) throw new Error(`Empty body for s3://${bucket}/${key}`);
+  return response.Body.transformToString('utf-8');
 }
 
 export async function uploadJson(bucket: string, key: string, data: string): Promise<void> {

@@ -290,6 +290,70 @@ Downloads the full meeting transcript from the Fireflies.ai GraphQL API and pers
 
 ---
 
+## `processTasks`
+
+**File:** `src/lambda/meetings/process-tasks.ts`
+**Trigger:** `POST /meetings/{id}/process-tasks`
+
+### Purpose
+Reads the full meeting transcript from S3, extracts participant names from the `meeting_participants` table, and uses AWS Bedrock (Claude) to generate a list of actionable tasks for each participant. Tasks are persisted to the `tasks` table and the meeting is marked as `task_processed = true`.
+
+### Prerequisites
+The meeting must have both flags set before this endpoint will proceed:
+- `participantsProcessed = true` — participants have been extracted
+- `dataProcessed = true` — transcript JSON has been uploaded to S3
+
+### Path Parameters
+| Param | Type | Description |
+|-------|------|-------------|
+| `id` | string | Meeting ID from the `meetings` table |
+
+### Response — Success, first call (`200`)
+```json
+{
+  "success": true,
+  "message": "Tasks processed — 4 task(s) created",
+  "data": {
+    "alreadyProcessed": false,
+    "tasksCreated": 4
+  }
+}
+```
+
+### Response — Already processed (`200`)
+```json
+{
+  "success": true,
+  "message": "Tasks already processed",
+  "data": { "alreadyProcessed": true }
+}
+```
+
+### Error Responses
+| Status | Condition |
+|--------|-----------|
+| `400` | Missing `id` path parameter |
+| `404` | Meeting not found in the database |
+| `422` | `participantsProcessed` or `dataProcessed` is not yet `true` |
+| `500` | S3 read failure, Bedrock error, DB error, or missing env vars |
+
+### Environment Variables
+| Variable | Description |
+|----------|-------------|
+| `MEETINGS_BUCKET` | S3 bucket containing `{id}/data.json` |
+
+### Business Logic Location
+`src/services/meetings/process-tasks-service.ts`
+
+### Notes
+- Idempotent — subsequent calls return `alreadyProcessed: true` instantly
+- The LLM prompt instructs Claude to only create tasks for participants with clear action items in the transcript
+- Each participant may have multiple tasks; tasks whose participant name cannot be matched are silently skipped
+- Timeout is 300 seconds to accommodate Bedrock invocation latency
+- Bedrock model: `anthropic.claude-3-5-haiku-20241022-v1:0`
+
+---
+
 ## Adding a New Lambda Function
 
 1. Create `src/lambda/<group>/<trigger>.ts` with a single exported `handler`
