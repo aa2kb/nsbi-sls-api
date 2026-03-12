@@ -1,8 +1,10 @@
 import { GraphQLClient, gql } from 'graphql-request';
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, asc, lt, and } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { meetings, cache } from '../../db/schema.js';
+
+const MAX_ATTEMPTS = 3;
 
 const PENDING_BATCH_LIMIT = 5;
 
@@ -28,6 +30,10 @@ async function publishPipelineEvent(meetingId: string): Promise<void> {
       Subject: 'process-meeting-pipeline',
     }),
   );
+  await db
+    .update(meetings)
+    .set({ attemptsMade: sql`${meetings.attemptsMade} + 1` })
+    .where(eq(meetings.id, meetingId));
   console.log(`[MeetingService] Published SNS event for meeting ${meetingId}`);
 }
 
@@ -266,7 +272,9 @@ export async function syncMeetings(): Promise<SyncResult> {
   }
 
   // --- SNS: re-queue up to PENDING_BATCH_LIMIT existing unfinished meetings ---
-  // A meeting is pending if any of the four processing flags is still false.
+  // A meeting is pending if any of the four processing flags is still false
+  // and it has not yet hit the max attempt cap.
+  // Priority: fewest attempts first (0 → 1 → 2), capped at MAX_ATTEMPTS.
   // Exclude meetings we just published above to avoid duplicates.
   const hasPendingFlag = sql<boolean>`(
     participants_processed = false OR
@@ -275,19 +283,23 @@ export async function syncMeetings(): Promise<SyncResult> {
     users_processed = false
   )`;
 
+  const underAttemptCap = lt(meetings.attemptsMade, MAX_ATTEMPTS);
+
   const pendingRows = newIds.size > 0
     ? await db
         .select({ id: meetings.id })
         .from(meetings)
-        .where(sql`${hasPendingFlag} AND id != ALL(ARRAY[${sql.join([...newIds].map((id) => sql`${id}`), sql`, `)}])`)
+        .where(sql`${and(underAttemptCap, hasPendingFlag)} AND id != ALL(ARRAY[${sql.join([...newIds].map((id) => sql`${id}`), sql`, `)}])`)
+        .orderBy(asc(meetings.attemptsMade))
         .limit(PENDING_BATCH_LIMIT)
     : await db
         .select({ id: meetings.id })
         .from(meetings)
-        .where(hasPendingFlag)
+        .where(and(underAttemptCap, hasPendingFlag))
+        .orderBy(asc(meetings.attemptsMade))
         .limit(PENDING_BATCH_LIMIT);
 
-  console.log(`[MeetingService] Found ${pendingRows.length} pending meeting(s) to re-queue`);
+  console.log(`[MeetingService] Found ${pendingRows.length} pending meeting(s) to re-queue (cap=${MAX_ATTEMPTS})`);
 
   for (const row of pendingRows) {
     await publishPipelineEvent(row.id);
