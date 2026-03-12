@@ -45,6 +45,7 @@ provider:
     DB_PASSWORD: ${env:DB_PASSWORD}
     FIREFLIES_API_KEY: ${env:FIREFLIES_API_KEY}
     MEETINGS_BUCKET: ${env:MEETINGS_BUCKET}
+    PIPELINE_TOPIC_ARN: arn:aws:sns:${aws:region}:${aws:accountId}:nsbi-meeting-pipeline-${self:custom.stage}
 
 functions:
   helloWorld:
@@ -111,6 +112,26 @@ functions:
     events:
       - http:
           path: /meetings/{id}/process-tasks
+          method: post
+          private: true
+
+  processUsers:
+    handler: src/lambda/meetings/process-users.handler
+    timeout: 300
+    events:
+      - http:
+          path: /meetings/{id}/process-users
+          method: post
+          private: true
+
+  processPipeline:
+    handler: src/lambda/meetings/process-pipeline.handler
+    timeout: 900
+    events:
+      - sns:
+          topicName: nsbi-meeting-pipeline-${self:custom.stage}
+      - http:
+          path: /meetings/{id}/process-pipeline
           method: post
           private: true
 

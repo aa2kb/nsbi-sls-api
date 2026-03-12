@@ -18,9 +18,10 @@ export const handler = async (
       return;
     }
 
-    return buildResponse(200, true, `Meetings synced successfully — ${result.saved} saved`, {
+    return buildResponse(200, true, `Meetings synced successfully — ${result.saved} saved, ${result.snsPublished} queued`, {
       saved: result.saved,
       fetched: result.fetched,
+      snsPublished: result.snsPublished,
       fromDate: result.fromDate,
       latestMeetingDate: result.latestMeetingDate,
     });

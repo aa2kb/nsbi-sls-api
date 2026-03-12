@@ -31,6 +31,7 @@ export const meetings = pgTable('meetings', {
   participantsProcessed: boolean('participants_processed').notNull().default(false),
   dataProcessed: boolean('data_processed').notNull().default(false),
   taskProcessed: boolean('task_processed').notNull().default(false),
+  usersProcessed: boolean('users_processed').notNull().default(false),
   syncedAt: timestamp('synced_at').notNull().defaultNow(),
 });
 
@@ -47,6 +48,7 @@ export const meetingParticipants = pgTable('meeting_participants', {
   id: uuid('id').primaryKey().defaultRandom(),
   speakerName: varchar('speaker_name', { length: 255 }).notNull(),
   meetingId: varchar('meeting_id', { length: 255 }).notNull().references(() => meetings.id),
+  userId: uuid('user_id').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => [
   unique('meeting_participants_meeting_id_speaker_name_unique').on(table.meetingId, table.speakerName),

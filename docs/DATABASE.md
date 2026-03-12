@@ -101,6 +101,22 @@ type NewTask = typeof tasks.$inferInsert;
 
 ---
 
+### `meeting_participants` table (updated)
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| `id` | `uuid` | Primary key, auto-generated |
+| `speaker_name` | `varchar(255)` | NOT NULL |
+| `meeting_id` | `varchar(255)` | NOT NULL, FK → `meetings.id` |
+| `user_id` | `uuid` | nullable, FK → `users.id` |
+| `created_at` | `timestamp` | NOT NULL, default `now()` |
+
+Unique constraint: `(meeting_id, speaker_name)`
+
+> `user_id` is populated by `POST /meetings/{id}/process-users`, which uses Claude to match speaker names to emails from `meeting.participants`.
+
+---
+
 ## Scripts
 
 | Script | Command | Description |

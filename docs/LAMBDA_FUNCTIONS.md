@@ -354,6 +354,141 @@ The meeting must have both flags set before this endpoint will proceed:
 
 ---
 
+## `processUsers`
+
+**File:** `src/lambda/meetings/process-users.ts`
+**Trigger:** `POST /meetings/{id}/process-users`
+
+### Purpose
+Takes the email list stored in `meeting.participants`, upserts a `users` row for each unique email, then uses AWS Bedrock (Claude) to fuzzy-match each email to its corresponding `meeting_participants` speaker name. Once a match is found the `meeting_participants.user_id` FK is updated to link the two records. Marks the meeting as `users_processed = true` when done.
+
+### Prerequisites
+- `participants` column on the meeting must contain an array of email strings (populated when the meeting is fetched)
+- `process-participants` should have run so `meeting_participants` rows exist for accurate name-to-email linking (not strictly required — users will still be created even without speaker rows)
+
+### Path Parameters
+| Param | Type | Description |
+|-------|------|-------------|
+| `id` | string | Meeting ID from the `meetings` table |
+
+### Response — Success, first call (`200`)
+```json
+{
+  "success": true,
+  "message": "Users processed — 2 user(s) created, 2 participant(s) linked",
+  "data": {
+    "alreadyProcessed": false,
+    "usersCreated": 2,
+    "usersMatched": 2,
+    "matches": [
+      { "email": "bconyers@nsbi.net", "speakerName": "Brandon Conyers", "userId": "uuid" },
+      { "email": "jpriszner@nsbi.net", "speakerName": "Jake Priszner", "userId": "uuid" }
+    ]
+  }
+}
+```
+
+### Response — Already processed (`200`)
+```json
+{
+  "success": true,
+  "message": "Users already processed",
+  "data": { "alreadyProcessed": true }
+}
+```
+
+### Error Responses
+| Status | Condition |
+|--------|-----------|
+| `400` | Missing `id` path parameter |
+| `404` | Meeting not found in the database |
+| `422` | `meeting.participants` is empty — no emails to process |
+| `500` | Bedrock error, DB error, or missing env vars |
+
+### Business Logic Location
+`src/services/meetings/process-users-service.ts`
+
+### Notes
+- Idempotent — subsequent calls return `alreadyProcessed: true` instantly
+- User upsert is by email — if a user already exists with that email, no duplicate is created
+- LLM matching uses the email prefix (e.g. `bconyers` → `Brandon Conyers`) as the primary matching signal
+- If the LLM cannot match an email to a speaker, `speakerName` is `null` and the user is still created (no participant link set)
+- Timeout is 300 seconds to accommodate Bedrock invocation latency
+- Bedrock model: `us.anthropic.claude-sonnet-4-6`
+
+---
+
+## `processPipeline`
+
+**File:** `src/lambda/meetings/process-pipeline.ts`
+**Triggers:**
+- SNS topic `nsbi-meeting-pipeline-{stage}` (primary)
+- `POST /meetings/{id}/process-pipeline` (HTTP, for local testing)
+
+### Purpose
+Runs the full meeting processing pipeline in sequence for a given meeting ID:
+1. **processData** — fetch transcript + audio from Fireflies, save to S3
+2. **processParticipants** — extract speakers → `meeting_participants` rows
+3. **processTasks** — LLM task extraction → `tasks` rows
+4. **processUsers** — email → user upsert + participant linking via LLM match
+
+Each step is idempotent — if a step was already completed it is skipped automatically.
+
+### SNS Message Format
+Publish either a plain meeting ID string or a JSON object:
+```
+01KKC379CPB2NX9VQJ41WV18N9
+```
+```json
+{ "meetingId": "01KKC379CPB2NX9VQJ41WV18N9" }
+```
+
+### Path Parameters (HTTP only)
+| Param | Type | Description |
+|-------|------|-------------|
+| `id` | string | Meeting ID from the `meetings` table |
+
+### Response — HTTP Success (`200`)
+```json
+{
+  "success": true,
+  "message": "Pipeline completed for meeting 01KKC379CPB2NX9VQJ41WV18N9",
+  "data": {
+    "meetingId": "01KKC379CPB2NX9VQJ41WV18N9",
+    "steps": {
+      "processData":        { "skipped": false, "alreadyProcessed": false, "dataKey": "...", "audioKey": "..." },
+      "processParticipants":{ "skipped": false, "created": 2, "skipped": 0 },
+      "processTasks":       { "skipped": false, "alreadyProcessed": false, "tasksCreated": 8 },
+      "processUsers":       { "skipped": false, "alreadyProcessed": false, "usersCreated": 2, "usersMatched": 2 }
+    }
+  }
+}
+```
+
+### Error Responses (HTTP)
+| Status | Condition |
+|--------|-----------|
+| `400` | Missing `id` path parameter |
+| `500` | Any step fails — error message returned |
+
+### SNS Error Behaviour
+If any step throws the error is re-thrown so Lambda marks the delivery as failed, enabling retries and DLQ routing.
+
+### SNS Topic
+| Resource | Value |
+|----------|-------|
+| CloudFormation logical ID | `MeetingPipelineTopic` |
+| Topic name | `nsbi-meeting-pipeline-{stage}` |
+
+### Business Logic Location
+`src/services/meetings/process-pipeline-service.ts`
+
+### Notes
+- Timeout is 900 seconds (15 min) to cover all four Bedrock + S3 + DB steps
+- Safe to trigger multiple times — each individual step checks its own `*_processed` flag and skips if already done
+
+---
+
 ## Adding a New Lambda Function
 
 1. Create `src/lambda/<group>/<trigger>.ts` with a single exported `handler`

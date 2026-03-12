@@ -1,7 +1,35 @@
 import { GraphQLClient, gql } from 'graphql-request';
+import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { meetings, cache } from '../../db/schema.js';
+
+const PENDING_BATCH_LIMIT = 5;
+
+let _snsClient: SNSClient | null = null;
+
+function getSnsClient(): SNSClient {
+  if (!_snsClient) {
+    _snsClient = new SNSClient({ region: process.env.AWS_REGION ?? 'us-east-1' });
+  }
+  return _snsClient;
+}
+
+async function publishPipelineEvent(meetingId: string): Promise<void> {
+  const topicArn = process.env.PIPELINE_TOPIC_ARN;
+  if (!topicArn) {
+    console.warn(`[MeetingService] PIPELINE_TOPIC_ARN not set — skipping SNS publish for ${meetingId}`);
+    return;
+  }
+  await getSnsClient().send(
+    new PublishCommand({
+      TopicArn: topicArn,
+      Message: JSON.stringify({ meetingId }),
+      Subject: 'process-meeting-pipeline',
+    }),
+  );
+  console.log(`[MeetingService] Published SNS event for meeting ${meetingId}`);
+}
 
 const FIREFLIES_API_URL = 'https://api.fireflies.ai/graphql';
 const CACHE_KEY = 'meetings:last_sync_date';
@@ -161,6 +189,7 @@ export interface SyncResult {
   saved: number;
   fromDate: string | null;
   latestMeetingDate: string | null;
+  snsPublished: number;
 }
 
 export async function syncMeetings(): Promise<SyncResult> {
@@ -227,12 +256,51 @@ export async function syncMeetings(): Promise<SyncResult> {
     }
   }
 
-  console.log(`[MeetingService] Sync complete | fetched=${all.length} | saved=${saved} | fromDate=${lastSyncDate ?? 'all'} | latestDate=${latestMeetingDate ?? 'n/a'}`);
+  // --- SNS: publish pipeline event for every newly fetched meeting ---
+  const newIds = new Set(batch.map((t) => t.id));
+  let snsPublished = 0;
+
+  for (const meetingId of newIds) {
+    await publishPipelineEvent(meetingId);
+    snsPublished++;
+  }
+
+  // --- SNS: re-queue up to PENDING_BATCH_LIMIT existing unfinished meetings ---
+  // A meeting is pending if any of the four processing flags is still false.
+  // Exclude meetings we just published above to avoid duplicates.
+  const hasPendingFlag = sql<boolean>`(
+    participants_processed = false OR
+    data_processed = false OR
+    task_processed = false OR
+    users_processed = false
+  )`;
+
+  const pendingRows = newIds.size > 0
+    ? await db
+        .select({ id: meetings.id })
+        .from(meetings)
+        .where(sql`${hasPendingFlag} AND id != ALL(ARRAY[${sql.join([...newIds].map((id) => sql`${id}`), sql`, `)}])`)
+        .limit(PENDING_BATCH_LIMIT)
+    : await db
+        .select({ id: meetings.id })
+        .from(meetings)
+        .where(hasPendingFlag)
+        .limit(PENDING_BATCH_LIMIT);
+
+  console.log(`[MeetingService] Found ${pendingRows.length} pending meeting(s) to re-queue`);
+
+  for (const row of pendingRows) {
+    await publishPipelineEvent(row.id);
+    snsPublished++;
+  }
+
+  console.log(`[MeetingService] Sync complete | fetched=${all.length} | saved=${saved} | snsPublished=${snsPublished} | fromDate=${lastSyncDate ?? 'all'} | latestDate=${latestMeetingDate ?? 'n/a'}`);
 
   return {
     fetched: all.length,
     saved,
     fromDate: lastSyncDate,
     latestMeetingDate,
+    snsPublished,
   };
 }
