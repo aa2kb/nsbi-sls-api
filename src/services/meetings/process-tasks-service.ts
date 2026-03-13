@@ -69,6 +69,9 @@ function transcriptToText(data: Record<string, unknown>): string {
   if (summary?.action_items) {
     lines.push(`\nAction Items: ${summary.action_items}`);
   }
+  if (summary?.shorthand_bullet) {
+    lines.push(`\nKey Points:\n${summary.shorthand_bullet}`);
+  }
 
   return lines.join('\n');
 }
