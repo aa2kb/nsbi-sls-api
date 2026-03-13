@@ -5,71 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1772889307804,
-      "tag": "0000_grey_grandmaster",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1772905482925,
-      "tag": "0001_third_mantis",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1772907480779,
-      "tag": "0002_foamy_strong_guy",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1772909088452,
-      "tag": "0003_bumpy_misty_knight",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1772910176652,
-      "tag": "0004_slim_tarot",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1741392000000,
-      "tag": "0005_add_data_processed",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1773348220736,
-      "tag": "0006_military_morbius",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1773351967648,
-      "tag": "0007_simple_joseph",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1773353392398,
-      "tag": "0008_safe_shatterstar",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1773353989787,
-      "tag": "0009_dapper_sharon_ventura",
+      "when": 1773423141135,
+      "tag": "0000_abandoned_tempest",
       "breakpoints": true
     }
   ]
