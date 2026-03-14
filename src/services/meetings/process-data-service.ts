@@ -1,6 +1,6 @@
 import { GraphQLClient, gql } from 'graphql-request';
 import { eq, sql } from 'drizzle-orm';
-import { db } from '../../db/index.js';
+import { db, prepared } from '../../db/index.js';
 import { meetings } from '../../db/schema.js';
 import { startProcessLog, endProcessLog } from './process-log-service.js';
 import { createWriteStream } from 'node:fs';
@@ -83,7 +83,7 @@ export interface ProcessDataResult {
 }
 
 export async function processData(meetingId: string): Promise<ProcessDataResult> {
-  const [meeting] = await db.select().from(meetings).where(eq(meetings.id, meetingId)).limit(1);
+  const [meeting] = await prepared.getMeetingById.execute({ id: meetingId });
 
   if (!meeting) {
     throw new MeetingNotFoundError(meetingId);

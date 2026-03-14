@@ -1,7 +1,7 @@
 import { GraphQLClient, gql } from 'graphql-request';
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import { eq, sql, asc, lt, and } from 'drizzle-orm';
-import { db } from '../../db/index.js';
+import { db, prepared } from '../../db/index.js';
 import { meetings, cache } from '../../db/schema.js';
 
 const MAX_ATTEMPTS = 3;
@@ -134,7 +134,7 @@ interface FirefliesResponse {
 }
 
 async function getLastSyncDate(): Promise<string | null> {
-  const result = await db.select().from(cache).where(eq(cache.key, CACHE_KEY)).limit(1);
+  const result = await prepared.getCacheByKey.execute({ key: CACHE_KEY });
   return result[0]?.value ?? null;
 }
 

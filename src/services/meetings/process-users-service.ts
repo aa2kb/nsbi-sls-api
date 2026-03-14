@@ -1,6 +1,6 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
-import { eq, inArray, sql } from 'drizzle-orm';
-import { db } from '../../db/index.js';
+import { eq, sql } from 'drizzle-orm';
+import { db, prepared } from '../../db/index.js';
 import { meetings, meetingParticipants, users } from '../../db/schema.js';
 import { startProcessLog, endProcessLog } from './process-log-service.js';
 
@@ -96,7 +96,7 @@ Respond ONLY with a valid JSON array — no explanation, no markdown, no code fe
 }
 
 export async function processUsers(meetingId: string): Promise<ProcessUsersResult> {
-  const [meeting] = await db.select().from(meetings).where(eq(meetings.id, meetingId)).limit(1);
+  const [meeting] = await prepared.getMeetingById.execute({ id: meetingId });
 
   if (!meeting) {
     throw new MeetingNotFoundError(meetingId);
@@ -120,10 +120,7 @@ export async function processUsers(meetingId: string): Promise<ProcessUsersResul
   const logId = await startProcessLog(meetingId, 'users');
 
   try {
-    const speakerRows = await db
-      .select()
-      .from(meetingParticipants)
-      .where(eq(meetingParticipants.meetingId, meetingId));
+    const speakerRows = await prepared.getParticipantsByMeetingId.execute({ meetingId });
 
     const speakerNames = speakerRows.map((r) => r.speakerName);
 

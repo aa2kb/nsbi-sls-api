@@ -1,7 +1,7 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { eq, sql } from 'drizzle-orm';
-import { db } from '../../db/index.js';
-import { meetings, meetingParticipants, tasks } from '../../db/schema.js';
+import { db, prepared } from '../../db/index.js';
+import { meetings, tasks } from '../../db/schema.js';
 import { startProcessLog, endProcessLog } from './process-log-service.js';
 import { getMeetingsBucket, getJson } from '../../utils/s3.js';
 
@@ -129,7 +129,7 @@ Only include participants who have actual tasks. Each participant may have multi
 }
 
 export async function processTasks(meetingId: string): Promise<ProcessTasksResult> {
-  const [meeting] = await db.select().from(meetings).where(eq(meetings.id, meetingId)).limit(1);
+  const [meeting] = await prepared.getMeetingById.execute({ id: meetingId });
 
   if (!meeting) {
     throw new MeetingNotFoundError(meetingId);
@@ -159,10 +159,7 @@ export async function processTasks(meetingId: string): Promise<ProcessTasksResul
     const transcriptData = JSON.parse(rawJson) as Record<string, unknown>;
     const transcriptText = transcriptToText(transcriptData);
 
-    const participants = await db
-      .select()
-      .from(meetingParticipants)
-      .where(eq(meetingParticipants.meetingId, meetingId));
+    const participants = await prepared.getParticipantsByMeetingId.execute({ meetingId });
 
     if (participants.length === 0) {
       console.warn(`[ProcessTasks] No participants found for meeting ${meetingId}`);

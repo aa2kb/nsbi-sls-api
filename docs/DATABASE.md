@@ -26,6 +26,26 @@ export const db = drizzle(pool, { schema });
 
 ---
 
+## Serverless Performance
+
+Per [Drizzle Serverless docs](https://orm.drizzle.team/docs/perf-serverless), the connection, `db` instance, and prepared statements are declared **outside handler scope** so Lambda can reuse them across invocations (up to 15 minutes).
+
+- **Connection & db** — Created at module load in `src/db/index.ts`
+- **Prepared statements** — Common read queries (e.g. `getMeetingById`, `getCacheByKey`, `getParticipantsByMeetingId`) are precompiled and exported as `prepared.*` for reuse
+
+```typescript
+// Usage in services
+import { db, prepared } from '../../db/index.js';
+
+// Prepared (reuses precompiled SQL)
+const [meeting] = await prepared.getMeetingById.execute({ id: meetingId });
+
+// Regular queries for dynamic filters, inserts, etc.
+await db.select().from(meetings).where(buildWhereClause(...));
+```
+
+---
+
 ## Schema
 
 Defined in `src/db/schema.ts`. The schema is the single source of truth — Drizzle generates TypeScript types and SQL migrations from it.

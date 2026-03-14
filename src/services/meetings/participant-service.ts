@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { db } from '../../db/index.js';
+import { db, prepared } from '../../db/index.js';
 import { meetings, meetingParticipants } from '../../db/schema.js';
 import { startProcessLog, endProcessLog } from './process-log-service.js';
 
@@ -52,11 +52,7 @@ function getNamesFromAttendance(raw: unknown): string[] {
 }
 
 export async function processParticipants(meetingId: string): Promise<ProcessParticipantsResult> {
-  const [meeting] = await db
-    .select()
-    .from(meetings)
-    .where(eq(meetings.id, meetingId))
-    .limit(1);
+  const [meeting] = await prepared.getMeetingById.execute({ id: meetingId });
 
   if (!meeting) {
     throw new MeetingNotFoundError(meetingId);
