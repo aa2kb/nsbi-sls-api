@@ -1,6 +1,6 @@
 # Lambda Functions
 
-All Lambda functions in this project are HTTP-triggered via AWS API Gateway. Every endpoint requires an API key (`x-api-key` header).
+Most Lambda functions are HTTP-triggered via AWS API Gateway and require an API key (`x-api-key` header). Auth endpoints (`/auth/*`) are public and use Better Auth session tokens instead.
 
 **Global configuration** (applies to all functions unless overridden):
 
@@ -12,6 +12,50 @@ All Lambda functions in this project are HTTP-triggered via AWS API Gateway. Eve
 | Region | `us-east-1` |
 | Log retention | 7 days |
 | Auth | API Key (`private: true`) |
+
+---
+
+## `authHandler`
+
+**File:** `src/lambda/auth/auth-handler.ts`
+**Trigger:** `ANY /auth/{proxy+}`
+**Auth:** Public (no API key required)
+
+### Purpose
+Single catch-all Lambda that proxies every request under `/auth/*` to the [Better Auth](https://better-auth.com) handler. All authentication logic (sign-up, sign-in, session management, password reset) is handled internally by Better Auth and persisted to the `auth` PostgreSQL schema.
+
+### Exposed Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/auth/sign-up/email` | Register a new account |
+| `POST` | `/auth/sign-in/email` | Login — returns session token + sets cookie |
+| `POST` | `/auth/sign-out` | Logout — invalidates current session |
+| `GET` | `/auth/get-session` | Get current session + user (also refreshes session) |
+| `GET` | `/auth/list-sessions` | List all active sessions for the user |
+| `POST` | `/auth/revoke-session` | Revoke a specific session by token |
+| `POST` | `/auth/revoke-other-sessions` | Revoke all sessions except current |
+| `POST` | `/auth/change-password` | Change password (requires current password) |
+| `POST` | `/auth/request-password-reset` | Send password-reset email |
+| `POST` | `/auth/reset-password` | Confirm reset with token + new password |
+| `OPTIONS` | `/auth/{proxy+}` | CORS preflight |
+
+### Notes
+- Sessions use cookies with a 7-day TTL; a 5-minute signed cookie cache reduces DB reads
+- All Better Auth tables are isolated in the `auth` PostgreSQL schema — no shared tables with the app schema
+- Run `pnpm run auth:migrate` to create/update the `auth` schema tables
+
+### Environment Variables
+| Variable | Description |
+|----------|-------------|
+| `BETTER_AUTH_SECRET` | ≥32-character secret for signing cookies and tokens |
+| `BETTER_AUTH_URL` | Public-facing API base URL (used in email redirect links) |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | Comma-separated list of allowed CORS origins |
+
+### Configuration
+`src/lib/auth.ts`
+
+See [AUTH.md](AUTH.md) for full documentation.
 
 ---
 
