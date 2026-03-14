@@ -64,3 +64,4 @@ pnpm run deploy:prod
 | [API Reference](docs/API_REFERENCE.md) | All API endpoints, request/response schemas |
 | [Database](docs/DATABASE.md) | Schema, migrations, and Drizzle ORM usage |
 | [Meetings](docs/MEETINGS.md) | Fireflies.ai meeting transcript sync — HTTP and scheduled |
+| [Query Parameters](docs/QUERY_PARAMS.md) | Standard page / limit / sort / filter params for all GET listing endpoints |

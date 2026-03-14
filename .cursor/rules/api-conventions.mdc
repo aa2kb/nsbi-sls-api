@@ -1,23 +1,87 @@
 ---
-description: API design conventions — all listing endpoints must be paginated
+description: API design conventions — all GET listing endpoints must use the standard query params utility
 globs: src/lambda/**/*.ts
 alwaysApply: false
 ---
 
-# API Conventions
+# API Conventions — GET Listing Endpoints
 
-## Listing Endpoints
-**All list/listing APIs must be paginated.** Never return all records without pagination.
+## Rule: Always use `parseQueryParams`
 
-### Query Parameters
-| Param | Default | Min | Max |
-|-------|---------|-----|-----|
-| `page` | 1 | 1 | — |
-| `limit` | 10 | 1 | 100 |
+Every `GET` listing handler **must** call `parseQueryParams` from `src/utils/query-params.ts`. Never hand-parse `page`, `limit`, `sort`, or `filter` from `event.queryStringParameters`.
 
-Optional resource-specific filters (e.g., `assignedTo`, `search`, `status`) are allowed.
+```typescript
+// ✅ CORRECT
+import { parseQueryParams } from '../../utils/query-params.js';
 
-### Response Format
+export const handler = async (event: APIGatewayProxyEvent) => {
+  const params = parseQueryParams(event.queryStringParameters);
+  const result = await listResources(params);
+  return buildResponse(200, true, 'Resources retrieved successfully', result);
+};
+
+// ❌ WRONG — never do this
+const page = parseInt(event.queryStringParameters?.page ?? '1');
+```
+
+---
+
+## Standard Query Parameters
+
+| Param | Type | Default | Constraint | Description |
+|-------|------|---------|-----------|-------------|
+| `page` | integer | `1` | min 1 | Page number (1-based) |
+| `limit` | integer | `250` | 1–250 | Records per page |
+| `sort` | string | `createdAt:desc` | `column:asc\|desc` | Sort column and direction |
+| `filter` | JSON string | none | URL-encoded JSON | Column filters (AND-combined) |
+
+### Filter format
+```
+?filter={"columnName":{"operator":"eq","value":false}}
+```
+Operators: `eq` `ne` `gt` `lt` `gte` `lte` `like`
+
+---
+
+## Service Layer: Column Map + Drizzle Builders
+
+Every listing service must define a `COLUMN_MAP` and use the builders:
+
+```typescript
+import { count, desc } from 'drizzle-orm';
+import type { ParsedQueryParams, QueryColumnMap } from '../../utils/query-params.js';
+import { buildOrderBy, buildWhereClause } from '../../utils/query-params.js';
+
+// Map API-facing camelCase names → Drizzle column references
+const COLUMN_MAP: QueryColumnMap = {
+  createdAt: myTable.createdAt,
+  name:      myTable.name,
+};
+
+export async function listResources(params: ParsedQueryParams) {
+  const { page, limit, offset, sort, filters } = params;
+  const orderBy     = buildOrderBy(sort, COLUMN_MAP) ?? desc(myTable.createdAt);
+  const whereClause = buildWhereClause(filters, COLUMN_MAP);
+
+  const [rows, countResult] = await Promise.all([
+    db.select().from(myTable).where(whereClause).orderBy(orderBy).limit(limit).offset(offset),
+    db.select({ total: count() }).from(myTable).where(whereClause),
+  ]);
+
+  const total      = countResult[0]?.total ?? 0;
+  const totalPages = Math.ceil(total / limit);
+
+  return {
+    resources: rows,
+    pagination: { page, limit, total, totalPages, hasNext: page < totalPages, hasPrevious: page > 1 },
+  };
+}
+```
+
+---
+
+## Response Shape
+
 ```json
 {
   "success": true,
@@ -25,18 +89,11 @@ Optional resource-specific filters (e.g., `assignedTo`, `search`, `status`) are 
   "data": {
     "resources": [...],
     "pagination": {
-      "page": 1,
-      "limit": 10,
-      "total": 42,
-      "totalPages": 5,
-      "hasNext": true,
-      "hasPrevious": false
+      "page": 1, "limit": 100, "total": 51,
+      "totalPages": 1, "hasNext": false, "hasPrevious": false
     }
   }
 }
 ```
 
-### Pagination Metadata
-- `totalPages` = `Math.ceil(total / limit)`
-- `hasNext` = current page < totalPages
-- `hasPrevious` = current page > 1
+Full reference: `docs/QUERY_PARAMS.md`

@@ -134,6 +134,164 @@ Creates a new user record in the database. Validates input with Zod and handles 
 
 ---
 
+## `listTasks`
+
+**File:** `src/lambda/tasks/list-tasks.ts`
+**Trigger:** `GET /tasks`
+
+### Purpose
+Returns a paginated, sortable, and filterable list of tasks. Each task is enriched with its related participant, the user linked to that participant (if any), and the meeting it belongs to.
+
+### Join Chain
+```
+tasks
+├── INNER JOIN meeting_participants  (tasks.participant_id)
+│       └── LEFT JOIN users          (meeting_participants.user_id — nullable)
+└── INNER JOIN meetings              (tasks.meeting_id)
+```
+
+### Query Parameters
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `page` | number | `1` | Page number |
+| `limit` | number | `100` | Results per page (max 100) |
+| `sort` | string | `createdAt:desc` | Column and direction |
+| `filter` | JSON string | none | Column filter object |
+
+#### Filterable / Sortable Columns
+`createdAt`, `updatedAt`, `completedAt`, `complete`, `meetingId`, `participantId`
+
+### Response — Success (`200`)
+```json
+{
+  "success": true,
+  "message": "Tasks retrieved successfully",
+  "data": {
+    "tasks": [
+      {
+        "id": "uuid",
+        "taskTitle": "Follow up with client",
+        "taskDescription": "Send the proposal by Friday",
+        "complete": false,
+        "createdAt": "2026-03-14T10:00:00.000Z",
+        "updatedAt": "2026-03-14T10:00:00.000Z",
+        "completedAt": null,
+        "participant": {
+          "id": "uuid",
+          "speakerName": "Brandon Conyers"
+        },
+        "user": {
+          "id": "uuid",
+          "name": "Brandon Conyers",
+          "email": "bconyers@nsbi.net"
+        },
+        "meeting": {
+          "id": "01KKC379CPB2NX9VQJ41WV18N9",
+          "title": "Weekly Sync",
+          "date": 1741564800000,
+          "dateString": "2026-03-10",
+          "hostEmail": null,
+          "organizerEmail": "bconyers@nsbi.net"
+        }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 100,
+      "total": 84,
+      "totalPages": 1,
+      "hasNext": false,
+      "hasPrevious": false
+    }
+  }
+}
+```
+
+### Notes
+- `user` fields (`id`, `name`, `email`) will be `null` when the participant has not been linked to a user yet (i.e. `process-users` has not run for that meeting)
+- `complete` filter example: `?filter={"complete":{"operator":"eq","value":false}}`
+
+### Error Responses
+| Status | Condition |
+|--------|-----------|
+| `500` | Database error or unexpected server error |
+
+### Business Logic Location
+`src/services/tasks/list-tasks-service.ts`
+
+---
+
+## `listMeetings`
+
+**File:** `src/lambda/meetings/list-meetings.ts`
+**Trigger:** `GET /meetings`
+
+### Purpose
+Returns a paginated, sortable, and filterable list of meetings from the database.
+
+### Query Parameters
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `page` | number | `1` | 1-based page number |
+| `limit` | number | `100` | Records per page (max 100) |
+| `sort` | string | `createdAt:desc` | Sort column and direction — e.g. `title:asc`, `date:desc` |
+| `filter` | JSON string | none | URL-encoded JSON filter object (see below) |
+
+#### Sortable columns
+`createdAt` (alias for `syncedAt`), `syncedAt`, `title`, `date`, `duration`, `hostEmail`, `organizerEmail`, `calendarType`, `participantsProcessed`, `dataProcessed`, `taskProcessed`, `usersProcessed`, `attemptsMade`
+
+#### Filter format
+Pass a URL-encoded JSON object where each key is a column name:
+```json
+{
+  "participantsProcessed": { "operator": "eq", "value": false },
+  "dataProcessed": { "operator": "eq", "value": true }
+}
+```
+Supported operators: `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `like`
+
+### Response — Success (`200`)
+```json
+{
+  "success": true,
+  "message": "Meetings retrieved successfully",
+  "data": {
+    "meetings": [
+      {
+        "id": "01KKC379CPB2NX9VQJ41WV18N9",
+        "title": "Weekly Sync",
+        "hostEmail": "host@example.com",
+        "participantsProcessed": false,
+        "dataProcessed": true,
+        "syncedAt": "2026-03-14T10:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 100,
+      "total": 42,
+      "totalPages": 1,
+      "hasNext": false,
+      "hasPrevious": false
+    }
+  }
+}
+```
+
+### Error Responses
+| Status | Condition |
+|--------|-----------|
+| `500` | Database error or unexpected server error |
+
+### Business Logic Location
+`src/services/meetings/list-meetings-service.ts`
+
+### Reusable Utilities
+`src/utils/query-params.ts` — `parseQueryParams`, `buildOrderBy`, `buildWhereClause`, `buildWhereConditions`
+These can be used by any other listing endpoint.
+
+---
+
 ## `fetchMeetings`
 
 **File:** `src/lambda/meetings/fetch-meetings.ts`

@@ -80,6 +80,24 @@ functions:
           method: post
           private: true
 
+  listTasks:
+    handler: src/lambda/tasks/list-tasks.handler
+    timeout: 30
+    events:
+      - http:
+          path: /tasks
+          method: get
+          private: true
+
+  listMeetings:
+    handler: src/lambda/meetings/list-meetings.handler
+    timeout: 30
+    events:
+      - http:
+          path: /meetings
+          method: get
+          private: true
+
   fetchMeetings:
     handler: src/lambda/meetings/fetch-meetings.handler
     timeout: 30
