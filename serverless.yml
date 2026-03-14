@@ -50,6 +50,8 @@ provider:
     DB_PASSWORD: ${env:DB_PASSWORD}
     FIREFLIES_API_KEY: ${env:FIREFLIES_API_KEY}
     MEETINGS_BUCKET: ${env:MEETINGS_BUCKET}
+    CLERK_JWT_KEY: ${env:CLERK_JWT_KEY}
+    CLERK_AUTHORIZED_PARTIES: ${env:CLERK_AUTHORIZED_PARTIES}
     PIPELINE_TOPIC_ARN: arn:aws:sns:${aws:region}:${aws:accountId}:nsbi-meeting-pipeline-${self:custom.stage}
 
 functions:
