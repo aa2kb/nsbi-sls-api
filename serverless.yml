@@ -51,24 +51,8 @@ provider:
     FIREFLIES_API_KEY: ${env:FIREFLIES_API_KEY}
     MEETINGS_BUCKET: ${env:MEETINGS_BUCKET}
     PIPELINE_TOPIC_ARN: arn:aws:sns:${aws:region}:${aws:accountId}:nsbi-meeting-pipeline-${self:custom.stage}
-    BETTER_AUTH_SECRET: ${env:BETTER_AUTH_SECRET}
-    BETTER_AUTH_URL: ${env:BETTER_AUTH_URL}
-    BETTER_AUTH_TRUSTED_ORIGINS: ${env:BETTER_AUTH_TRUSTED_ORIGINS, ''}
 
 functions:
-  # ── Auth (Better Auth) ────────────────────────────────────────────────────
-  authHandler:
-    handler: src/lambda/auth/auth-handler.handler
-    timeout: 30
-    events:
-      # Catch-all for all Better Auth sub-routes (POST, GET, OPTIONS …)
-      - http:
-          path: /auth/{proxy+}
-          method: any
-          private: false
-          cors: true
-
-  # ── Application routes ────────────────────────────────────────────────────
   helloWorld:
     handler: src/lambda/hello/hello.handler
     timeout: 30

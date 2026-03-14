@@ -12,7 +12,7 @@ A serverless REST API built with AWS Lambda, API Gateway, Node.js 22, TypeScript
 | Database | PostgreSQL + Drizzle ORM |
 | Bundler | esbuild |
 | Package Manager | pnpm |
-| Auth | API Key (API Gateway) + Better Auth (sessions) |
+| Auth | API Key (API Gateway) |
 
 ## Project Structure
 
@@ -65,4 +65,3 @@ pnpm run deploy:prod
 | [Database](docs/DATABASE.md) | Schema, migrations, and Drizzle ORM usage |
 | [Meetings](docs/MEETINGS.md) | Fireflies.ai meeting transcript sync — HTTP and scheduled |
 | [Query Parameters](docs/QUERY_PARAMS.md) | Standard page / limit / sort / filter params for all GET listing endpoints |
-| [Auth](docs/AUTH.md) | Better Auth setup — sign-up, sign-in, sessions, password reset |
