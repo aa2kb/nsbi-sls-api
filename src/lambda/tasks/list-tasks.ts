@@ -1,10 +1,12 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { buildResponse } from '../../utils/response.js';
 import { parseQueryParams } from '../../utils/query-params.js';
+import { verifyAuthToken } from '../../utils/auth.js';
 import { listTasks } from '../../services/tasks/list-tasks-service.js';
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
+    await verifyAuthToken(event as APIGatewayProxyEvent);
     const params = parseQueryParams(event.queryStringParameters);
     const result = await listTasks(params);
 
