@@ -292,6 +292,32 @@ These can be used by any other listing endpoint.
 
 ---
 
+## `meetingWebhook`
+
+**File:** `src/lambda/meetings/meeting-webhook.ts`
+**Trigger:** `POST /meetings/webhook`
+
+### Purpose
+Receives webhook callbacks for meeting events (e.g. from Fireflies.ai). Currently logs the incoming payload for debugging. No API key required (`private: false`) so external services can call it.
+
+### Request
+- Method: `POST`
+- Body: JSON (any shape — logged as-is)
+
+### Response — Success (`200`)
+```json
+{
+  "success": true,
+  "message": "Webhook received"
+}
+```
+
+### Notes
+- Payload is logged to CloudWatch for inspection
+- Placeholder for future webhook processing logic
+
+---
+
 ## `fetchMeetings`
 
 **File:** `src/lambda/meetings/fetch-meetings.ts`

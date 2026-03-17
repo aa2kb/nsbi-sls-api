@@ -100,6 +100,15 @@ functions:
           method: get
           private: true
 
+  meetingWebhook:
+    handler: src/lambda/meetings/meeting-webhook.handler
+    timeout: 30
+    events:
+      - http:
+          path: /meetings/webhook
+          method: post
+          private: false
+
   fetchMeetings:
     handler: src/lambda/meetings/fetch-meetings.handler
     timeout: 30
@@ -109,9 +118,9 @@ functions:
           method: get
           private: true
       - schedule:
-          rate: rate(1 day)
+          rate: rate(15 minutes)
           enabled: true
-          description: Daily sync of meetings from Fireflies
+          description: Sync meetings from Fireflies every 15 minutes
 
   processParticipants:
     handler: src/lambda/meetings/process-participants.handler

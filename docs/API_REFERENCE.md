@@ -2,7 +2,7 @@
 
 ## Authentication
 
-All endpoints require an API key passed in the `x-api-key` header.
+All endpoints except `POST /meetings/webhook` require an API key passed in the `x-api-key` header.
 
 ```
 x-api-key: <your-api-key>
@@ -148,6 +148,24 @@ GET /tasks?filter={"participantId":{"operator":"eq","value":"<uuid>"}}
 | Status | Description |
 |--------|-------------|
 | `500` | Database or unexpected server error |
+
+---
+
+### `POST /meetings/webhook`
+
+Receives webhook callbacks for meeting events (e.g. from Fireflies.ai). **No API key required** — intended for external services to call.
+
+**Request Body:** JSON (any shape — logged as-is)
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "message": "Webhook received"
+}
+```
+
+**Notes:** Payload is logged to CloudWatch. Placeholder for future webhook processing logic.
 
 ---
 
