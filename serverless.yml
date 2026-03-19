@@ -70,12 +70,12 @@ provider:
     PIPELINE_TOPIC_ARN: arn:aws:sns:${aws:region}:${aws:accountId}:nsbi-meeting-pipeline-${self:custom.stage}
 
 functions:
-  helloWorld:
-    handler: src/lambda/hello/hello.handler
+  healthCheck:
+    handler: src/lambda/health/health.handler
     timeout: 30
     events:
       - http:
-          path: /hello
+          path: /health
           method: get
           private: true
 

@@ -52,17 +52,21 @@ Error responses:
 
 ## Endpoints
 
-### `GET /hello`
+### `GET /health`
 
-Health-check endpoint. No authentication required for testing but API key is still enforced.
+Health-check endpoint. Confirms the API is reachable.
 
 **Response `200`**
 ```json
 {
-  "message": "Hello from NSBI API!",
-  "stage": "dev",
-  "timestamp": "2026-03-07T12:00:00.000Z",
-  "path": "/hello"
+  "success": true,
+  "message": "OK",
+  "data": {
+    "status": "ok",
+    "stage": "dev",
+    "timestamp": "2026-03-07T12:00:00.000Z",
+    "path": "/health"
+  }
 }
 ```
 

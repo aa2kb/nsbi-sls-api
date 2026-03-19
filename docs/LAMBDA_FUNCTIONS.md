@@ -15,21 +15,25 @@ All Lambda functions are HTTP-triggered via AWS API Gateway. Every endpoint requ
 
 ---
 
-## `helloWorld`
+## `healthCheck`
 
-**File:** `src/lambda/hello/hello.ts`
-**Trigger:** `GET /hello`
+**File:** `src/lambda/health/health.ts`
+**Trigger:** `GET /health`
 
 ### Purpose
-Health-check / smoke-test endpoint. Confirms the API is reachable and returns the current stage and timestamp.
+Health-check endpoint. Confirms the API is reachable and returns the current stage and timestamp.
 
 ### Response
 ```json
 {
-  "message": "Hello from NSBI API!",
-  "stage": "dev",
-  "timestamp": "2026-03-07T12:00:00.000Z",
-  "path": "/hello"
+  "success": true,
+  "message": "OK",
+  "data": {
+    "status": "ok",
+    "stage": "dev",
+    "timestamp": "2026-03-07T12:00:00.000Z",
+    "path": "/health"
+  }
 }
 ```
 

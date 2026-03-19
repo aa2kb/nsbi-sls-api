@@ -22,8 +22,8 @@ src/
     index.ts          # DB connection (singleton pg.Pool)
     schema.ts         # Drizzle table definitions
   lambda/
-    hello/
-      hello.ts        # Health-check endpoint
+    health/
+      health.ts       # Health-check endpoint
     users/
       list-users.ts   # GET /users
       create-user.ts  # POST /users
