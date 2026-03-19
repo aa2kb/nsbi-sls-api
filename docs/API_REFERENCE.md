@@ -155,17 +155,26 @@ GET /tasks?filter={"participantId":{"operator":"eq","value":"<uuid>"}}
 
 Receives webhook callbacks for meeting events (e.g. from Fireflies.ai). **No API key required** — intended for external services to call.
 
-**Request Body:** JSON (any shape — logged as-is)
+Calls `syncMeetings()` — the same logic as `GET /meetings/fetch` — to fetch, upsert, and publish meetings.
+
+**Request Body:** JSON (e.g. `{ "meetingId": "...", "eventType": "Transcription completed" }` — logged for debugging)
 
 **Response `200`**
 ```json
 {
   "success": true,
-  "message": "Webhook received"
+  "message": "Meetings synced — X saved, Y queued",
+  "data": {
+    "saved": 0,
+    "fetched": 0,
+    "snsPublished": 0,
+    "fromDate": "...",
+    "latestMeetingDate": "..."
+  }
 }
 ```
 
-**Notes:** Payload is logged to CloudWatch. Placeholder for future webhook processing logic.
+**Error Responses:** `500` (Fireflies API or internal error)
 
 ---
 

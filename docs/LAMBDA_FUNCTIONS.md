@@ -298,23 +298,34 @@ These can be used by any other listing endpoint.
 **Trigger:** `POST /meetings/webhook`
 
 ### Purpose
-Receives webhook callbacks for meeting events (e.g. from Fireflies.ai). Currently logs the incoming payload for debugging. No API key required (`private: false`) so external services can call it.
+Receives webhook callbacks for meeting events (e.g. from Fireflies.ai). On each request, calls `syncMeetings()` — the same function used by `fetchMeetings` — to fetch, upsert, and publish meetings. No API key required (`private: false`) so external services can call it.
 
 ### Request
 - Method: `POST`
-- Body: JSON (any shape — logged as-is)
+- Body: JSON (e.g. `{ "meetingId": "...", "eventType": "Transcription completed" }` — logged for debugging)
 
 ### Response — Success (`200`)
 ```json
 {
   "success": true,
-  "message": "Webhook received"
+  "message": "Meetings synced — X saved, Y queued",
+  "data": {
+    "saved": 0,
+    "fetched": 0,
+    "snsPublished": 0,
+    "fromDate": "...",
+    "latestMeetingDate": "..."
+  }
 }
 ```
 
-### Notes
-- Payload is logged to CloudWatch for inspection
-- Placeholder for future webhook processing logic
+### Error Responses
+| Status | Condition |
+|--------|-----------|
+| `500` | Fireflies API error or internal error |
+
+### Business Logic Location
+`src/services/meetings/meeting-service.ts` — `syncMeetings`
 
 ---
 

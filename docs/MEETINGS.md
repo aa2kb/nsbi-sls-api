@@ -8,6 +8,7 @@ Fetches meeting transcripts from the [Fireflies.ai](https://fireflies.ai) GraphQ
 - Returns transcript metadata including summaries, participants, attendance, and action items
 - Runs automatically every day via EventBridge schedule
 - Also available on-demand via `GET /meetings/fetch`
+- **Webhook:** `POST /meetings/webhook` — when Fireflies sends a webhook, calls `syncMeetings()` (same as fetch endpoint)
 
 ## How It Works
 
@@ -86,12 +87,22 @@ GET /meetings/fetch?fromDate=2026-03-01T00:00:00.000Z
 
 The function runs automatically once per day via an EventBridge `rate(1 day)` rule. On scheduled invocations the function logs the number of meetings fetched but does not return an HTTP response.
 
+### Webhook Endpoint
+
+```
+POST /meetings/webhook
+(no API key required)
+```
+
+When Fireflies.ai sends a webhook, the handler calls `syncMeetings()` — the same function used by the fetch endpoint.
+
 ## Key Implementation Details
 
 | File | Purpose |
 |------|---------|
-| `src/lambda/meetings/fetch-meetings.ts` | Thin handler — detects trigger type, calls service, builds response |
-| `src/services/meetings/meeting-service.ts` | Business logic — builds GraphQL client, executes query |
+| `src/lambda/meetings/fetch-meetings.ts` | Thin handler — detects trigger type, calls `syncMeetings`, builds response |
+| `src/lambda/meetings/meeting-webhook.ts` | Webhook handler — calls `syncMeetings` on incoming webhook |
+| `src/services/meetings/meeting-service.ts` | Business logic — `syncMeetings`, GraphQL client, upsert, SNS publish |
 | `src/utils/response.ts` | Shared `buildResponse` helper |
 
 **GraphQL client:** [`graphql-request`](https://github.com/jasonkuhrt/graphql-request) — lightweight, fetch-based GraphQL client.
