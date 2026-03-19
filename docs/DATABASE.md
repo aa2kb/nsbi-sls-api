@@ -2,27 +2,28 @@
 
 This project uses **PostgreSQL** with **Drizzle ORM** for type-safe database access.
 
-## Connection
+## Connection Strategy
 
-The DB connection is managed as a singleton `pg.Pool` in `src/db/index.ts`. The pool is initialized lazily (on first call) and limited to **1 connection** — this is intentional for Lambda environments where each function instance handles one request at a time.
+The DB connection in `src/db/index.ts` switches automatically based on environment:
+
+| Context | Driver | When |
+|---------|--------|------|
+| **Lambda** (deployed) | AWS RDS Data API | `DB_RESOURCE_ARN` and `SECRET_ARN` are set |
+| **Local** (offline, migrations, drizzle-kit) | node-postgres (direct) | `RESOURCE_ARN` / `SECRET_ARN` not set |
+
+- **Lambda**: Uses [RDS Data API](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/data-api.html) — no VPC, no connection pooling, HTTP-based. Ideal for serverless.
+- **Migrations & drizzle-kit**: Always use direct connection via `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD` (see `drizzle.config.ts` and `scripts/drizzle-migrate.ts`).
 
 ```typescript
-// src/db/index.ts
-const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT ?? 5432),
-  database: process.env.DB_NAME,
-  user: process.env.DB_USERNAME,
-  password: process.env.DB_PASSWORD,
-  ssl: { rejectUnauthorized: false },
-  max: 1,
-  idleTimeoutMillis: 30000,
-});
+// src/db/index.ts — simplified
+const useDataApi = !!(DB_RESOURCE_ARN && SECRET_ARN && DB_NAME);
 
-export const db = drizzle(pool, { schema });
+const db = useDataApi
+  ? drizzleDataApi({ connection: { database, secretArn, resourceArn: DB_RESOURCE_ARN }, schema })
+  : drizzleNodePg(pool, { schema });
 ```
 
-**SSL** is required for all environments. Set `rejectUnauthorized: false` to allow self-signed certificates (e.g., RDS with SSL).
+**SSL** is required for direct connections. Set `rejectUnauthorized: false` to allow self-signed certificates (e.g., RDS with SSL).
 
 ---
 
@@ -152,6 +153,8 @@ Unique constraint: `(meeting_id, speaker_name)`
 
 ## Environment Variables
 
+### Direct connection (migrations, drizzle-kit, local dev)
+
 | Variable | Description |
 |----------|-------------|
 | `DB_HOST` | PostgreSQL host |
@@ -159,3 +162,28 @@ Unique constraint: `(meeting_id, speaker_name)`
 | `DB_NAME` | Database name |
 | `DB_USERNAME` | Database user |
 | `DB_PASSWORD` | Database password |
+
+### RDS Data API (Lambda only)
+
+| Variable | Description |
+|----------|-------------|
+| `DB_CLUSTER_ARN` | Aurora cluster ARN (e.g. `arn:aws:rds:us-east-1:123456789:cluster:nsbi`) |
+| `DB_SECRET_ARN` | Secrets Manager secret ARN with `{"username":"postgres","password":"..."}` |
+
+**Creating the secret** (if you don't have one):
+
+```bash
+aws secretsmanager create-secret \
+  --name nsbi-db-credentials \
+  --secret-string '{"username":"postgres","password":"YOUR_DB_PASSWORD"}' \
+  --profile nsbi
+```
+
+Then add to `.env` (or CI):
+
+```
+DB_CLUSTER_ARN=arn:aws:rds:us-east-1:YOUR_ACCOUNT:cluster:nsbi
+DB_SECRET_ARN=arn:aws:secretsmanager:us-east-1:YOUR_ACCOUNT:secret:nsbi-db-credentials-XXXXXX
+```
+
+**Data API must be enabled** on the Aurora cluster. See [Enabling the RDS Data API](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/data-api.enabling.html).

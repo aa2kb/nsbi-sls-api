@@ -63,6 +63,7 @@ pnpm run deploy:prod
 | [Lambda Functions](docs/LAMBDA_FUNCTIONS.md) | All Lambda handlers — purpose, config, and triggers |
 | [API Reference](docs/API_REFERENCE.md) | All API endpoints, request/response schemas |
 | [Database](docs/DATABASE.md) | Schema, migrations, and Drizzle ORM usage |
+| [Data API](docs/DATA_API.md) | AWS RDS Data API for Lambda DB access (no VPC) |
 | [Meetings](docs/MEETINGS.md) | Fireflies.ai meeting transcript sync — HTTP and scheduled |
 | [Query Parameters](docs/QUERY_PARAMS.md) | Standard page / limit / sort / filter params for all GET listing endpoints |
 | [Query Params — Frontend](docs/QUERY_PARAMS_FRONTEND.md) | API query params reference for frontend integration |

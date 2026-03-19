@@ -41,6 +41,18 @@ provider:
             - sns:Publish
           Resource:
             - "*"
+        # RDS Data API (Lambda DB access without VPC)
+        - Effect: Allow
+          Action:
+            - rds-data:ExecuteStatement
+            - rds-data:BatchExecuteStatement
+          Resource:
+            - "*"
+        - Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+          Resource:
+            - arn:aws:secretsmanager:us-east-1:450328358809:secret:nsbi-db-credentials-SBpR01
   environment:
     STAGE: ${self:custom.stage}
     DB_HOST: ${env:DB_HOST}
@@ -48,6 +60,9 @@ provider:
     DB_NAME: ${env:DB_NAME}
     DB_USERNAME: ${env:DB_USERNAME}
     DB_PASSWORD: ${env:DB_PASSWORD}
+    # AWS RDS Data API (Lambda uses these; migrations use DB_HOST/DB_USERNAME/DB_PASSWORD)
+    DB_RESOURCE_ARN: arn:aws:rds:us-east-1:450328358809:cluster:nsbi
+    SECRET_ARN: arn:aws:secretsmanager:us-east-1:450328358809:secret:nsbi-db-credentials-SBpR01
     FIREFLIES_API_KEY: ${env:FIREFLIES_API_KEY}
     MEETINGS_BUCKET: ${env:MEETINGS_BUCKET}
     CLERK_JWT_KEY: ${env:CLERK_JWT_KEY}

@@ -1,35 +1,50 @@
 import { eq, sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { drizzle as drizzleDataApi } from 'drizzle-orm/aws-data-api/pg';
+import { drizzle as drizzleNodePg } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema.js';
 import { cache, meetings, meetingParticipants } from './schema.js';
 
-// ─── Connection & DB (outside handler scope for Lambda reuse) ─────────────────
-// Per https://orm.drizzle.team/docs/perf-serverless: declare connection and db
-// at module level so Lambda can reuse them across invocations (up to 15min).
+// ─── Connection strategy ───────────────────────────────────────────────────
+// Lambda: AWS RDS Data API (no VPC, no connection pooling, serverless-friendly)
+// Local / migrations / drizzle-kit: node-postgres (direct connection)
+// See https://orm.drizzle.team/docs/connect-aws-data-api-pg
 
-let pool: Pool | undefined;
+const useDataApi = !!(
+  process.env.DB_RESOURCE_ARN &&
+  process.env.SECRET_ARN &&
+  process.env.DB_NAME
+);
 
-const getPool = (): Pool => {
-  if (!pool) {
-    pool = new Pool({
-      host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT ?? 5432),
-      database: process.env.DB_NAME,
-      user: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      ssl: { rejectUnauthorized: false },
-      max: 1,
-      idleTimeoutMillis: 30000,
-    });
-  }
-  return pool;
-};
+// Use Data API in Lambda, node-postgres otherwise. Only create Pool when using
+// direct connection. Cast Data API instance so consumers get correct typings.
+const db = useDataApi
+  ? (drizzleDataApi({
+      connection: {
+        database: process.env.DB_NAME!,
+        secretArn: process.env.SECRET_ARN!,
+        resourceArn: process.env.DB_RESOURCE_ARN!,
+        region: process.env.AWS_REGION ?? 'us-east-1',
+      },
+      schema,
+    }) as unknown as ReturnType<typeof drizzleNodePg>)
+  : drizzleNodePg(
+      new Pool({
+        host: process.env.DB_HOST,
+        port: Number(process.env.DB_PORT ?? 5432),
+        database: process.env.DB_NAME,
+        user: process.env.DB_USERNAME,
+        password: process.env.DB_PASSWORD,
+        ssl: { rejectUnauthorized: false },
+        max: 1,
+        idleTimeoutMillis: 30000,
+      }),
+      { schema }
+    );
 
-const databaseConnection = getPool();
-export const db = drizzle(databaseConnection, { schema });
+export { db };
 
-// ─── Prepared statements (outside handler scope for Lambda reuse) ───────────
+// ─── Prepared statements (outside handler scope for Lambda reuse) ─────────────
 // Precompiled queries reused across invocations — avoids re-parsing SQL each time.
 
 export const prepared = {
